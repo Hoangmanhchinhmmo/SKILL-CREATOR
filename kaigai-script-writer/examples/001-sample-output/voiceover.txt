@@ -1,0 +1,19 @@
+[Sample - Đây là file mẫu minh họa cấu trúc output]
+[Trong thực tế, file này sẽ chứa toàn bộ script tiếng Nhật, plain text, không markdown]
+
+その瞬間、球場全体が静まり返りました。
+誰もが、目の前で起きたことを信じられなかったのです。
+大谷翔平が、ついに「50-50」を達成しました。
+メジャーリーグの歴史の中で、誰も成し遂げたことのない偉業です。
+
+
+[Phần Bối cảnh sẽ ở đây - cách 2 dòng trống]
+
+
+[Phần Diễn biến sẽ ở đây - cách 2 dòng trống]
+
+
+[Phần Phản ứng quốc tế sẽ ở đây - cách 2 dòng trống]
+
+
+[Phần Kết luận sẽ ở đây - cách 2 dòng trống]

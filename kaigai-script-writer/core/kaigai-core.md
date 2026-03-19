@@ -82,23 +82,11 @@ NEXT STEP
 
 ### Giai đoạn 4: WRITE
 
-Khi người dùng chọn topic → viết bộ nội dung hoàn chỉnh.
-
-**Bước đầu tiên:** Tạo thư mục output ngay (ví dụ: `002-japan-vs-usa-wbc/`).
-
-**Flow viết — từng phần một (5 phần tuần tự):**
-
-Với mỗi phần (Hook → Bối cảnh → Diễn biến → Phản ứng QT → Kết luận):
-1. PLAN + WRITE (nội bộ)
-2. COUNT & VERIFY (hiển thị)
-3. Nếu OK → ghi file phần (`01-hook.txt`, `02-context.txt`...) → chuyển phần tiếp
-4. Nếu UNDER/OVER → move file cũ vào `bak/` → viết lại → loop đến khi OK
-
-Sau khi cả 5 phần OK → FINAL REPORT → merge thành `voiceover.txt` → ghi `metadata.md`.
+Khi người dùng chọn topic → Orchestrator khởi động WRITE PIPELINE (xem chi tiết bên dưới).
 
 **Chế độ viết:**
-- **Mặc định:** viết liên tục 5 phần, không dừng chờ giữa các phần
-- **Nếu người dùng yêu cầu "viết từng phần":** viết 1 phần → ghi file → dừng chờ user confirm → viết phần tiếp
+- **Mặc định:** chạy pipeline liên tục 5 phần, không dừng chờ giữa các phần
+- **Nếu người dùng yêu cầu "viết từng phần":** chạy pipeline 1 phần → dừng chờ user confirm → phần tiếp
 
 ---
 
@@ -185,93 +173,239 @@ Cảm xúc
 
 ---
 
-## CHAIN OF THOUGHT — QUY TRÌNH TƯ DUY KHI VIẾT
+## WRITE PIPELINE — MULTI-AGENT (GIAI ĐOẠN 4)
 
-Trước khi viết MỖI phần script, thực hiện 4 bước. Bước 1–2 là nội bộ (không hiển thị cho user). Bước 3–4 là bắt buộc hiển thị.
+Ba agent chuyên biệt chạy tuần tự cho mỗi phần script. Orchestrator điều phối.
 
-### Bước 1: PLAN (Nội bộ — không hiển thị)
-- Phần này cần truyền tải thông điệp gì?
-- Cảm xúc mục tiêu ở đầu phần vs cuối phần?
-- Có bao nhiêu beat changes?
-- Câu mở đầu phần này nên là gì?
-- Câu kết phần này dẫn sang phần tiếp theo như thế nào?
-- **Ước tính cần bao nhiêu câu** để đạt target? (Mỗi câu tiếng Nhật trung bình ~35 ký tự → Hook 400 chars ≈ 12 câu, Bối cảnh 700 chars ≈ 20 câu, Diễn biến 2500 chars ≈ 72 câu, Phản ứng QT 1200 chars ≈ 34 câu, Kết luận 400 chars ≈ 12 câu)
-- **Kiểm tra COMMON FAILURE MODES:** Phần này có nguy cơ mắc lỗi nào? (xem bảng trên)
-- **Câu kết phần này:** Người nghe sẽ cảm thấy gì? Có đúng Emotional Arc không?
+---
 
-### Bước 2: WRITE (Nội bộ — không hiển thị)
-- Viết theo dàn ý, bám sát khoảng ký tự
-- Áp dụng TTS rules
-- Dùng sentence patterns phù hợp
-- **Viết đủ số câu ước tính ở Bước 1 trước khi dừng**
+### ORCHESTRATOR LOGIC
 
-### Bước 3: COUNT & VERIFY + GHI FILE (BẮT BUỘC — hiển thị cho user)
+**Setup:**
+1. Tạo `XXX-slug/` và `XXX-slug/_draft/` ngay khi bắt đầu WRITE
+2. Kiểm tra Agent tool: nếu khả dụng → Multi-agent mode. Nếu không → Single-agent fallback (xem cuối section)
 
-**Sau khi viết xong mỗi phần, PHẢI đếm và báo cáo:**
+**Với mỗi phần (Hook → Bối cảnh → Diễn biến → Phản ứng QT → Kết luận):**
 
 ```
-📊 [Tên phần]: [số ký tự thực tế] / [target min]–[target max] → [OK / UNDER / OVER]
+🖊️ Writer đang draft [Tên phần]...
+```
+→ Spawn WRITER agent → ghi `_draft/NN-name_draft.txt`
+
+```
+🎙️ Narrator đang rewrite...
+```
+→ Spawn NARRATOR SPECIALIST → ghi `_draft/NN-name_narrated.txt`
+
+```
+📋 Reviewer đang kiểm tra...
+```
+→ Spawn REVIEWER → output PASS hoặc FAIL
+
+**Nếu PASS:**
+```
+✅ Reviewer: PASS — ghi NN-name.txt
+```
+→ Copy narrated file → `NN-name.txt` → chuyển phần tiếp
+
+**Nếu FAIL (lần 1):**
+```
+⚠️ Reviewer: FAIL
+  - [chiều]: [item fail]: [lý do] → [gợi ý fix]
+Narrator viết lại (lần 1/2)...
+```
+→ Spawn NARRATOR lại với feedback từ Reviewer
+
+**Nếu FAIL (lần 2):**
+```
+⚠️ Reviewer: FAIL (lần 2)
+  - [chiều]: [item fail]: [lý do] → [gợi ý fix]
+⚠️ WARNING: [Tên phần] không đạt threshold sau 2 vòng — ghi file với chất lượng hiện tại
+```
+→ Ghi file, tiếp tục phần tiếp theo
+
+**Sau khi cả 5 phần xong:**
+→ FINAL REPORT → merge → `voiceover.txt` → `metadata.md`
+
+**Mapping tên file:**
+| Phần | Draft | Final |
+|------|-------|-------|
+| Hook | `_draft/01-hook_draft.txt` | `01-hook.txt` |
+| Bối cảnh | `_draft/02-context_draft.txt` | `02-context.txt` |
+| Diễn biến | `_draft/03-development_draft.txt` | `03-development.txt` |
+| Phản ứng QT | `_draft/04-reactions_draft.txt` | `04-reactions.txt` |
+| Kết luận | `_draft/05-conclusion_draft.txt` | `05-conclusion.txt` |
+
+---
+
+### WRITER AGENT
+
+**Prompt:**
+```
+Bạn là WRITER agent cho kaigai-script-writer.
+Nhiệm vụ: Draft nội dung phần "{section_name}" ({char_min}–{char_max} ký tự).
+Topic: {topic_name}
+Emotional target: {emotional_goal}
+Beat requirements: {beat_requirements}
+
+Tham khảo CÔNG THỨC VIẾT TỪNG PHẦN và ƯỚC TÍNH ĐỘ DÀI trong core file.
+
+FOCUS CỦA BẠN:
+✅ Facts chính xác, storyline logic
+✅ Đúng số beat changes và timing (xem EMOTIONAL ARC BLUEPRINT)
+✅ Đủ ký tự theo target (xem ƯỚC TÍNH ĐỘ DÀI — đừng viết thiếu)
+✅ Câu kết phần dẫn sang phần tiếp tự nhiên
+
+KHÔNG CẦN LO:
+❌ Văn phong tiếng Nhật hoàn hảo — Narrator sẽ fix
+❌ Biểu hiện 日本語らしい — Narrator sẽ thêm
+❌ TTS rhythm — Narrator sẽ handle
+
+Output: Plain text tiếng Nhật, đủ ký tự target.
 ```
 
-Ví dụ:
+**Writer tham khảo:** CÔNG THỨC VIẾT TỪNG PHẦN, ƯỚC TÍNH ĐỘ DÀI, EMOTIONAL ARC BLUEPRINT, COMMON FAILURE MODES.
+
+---
+
+### NARRATOR SPECIALIST AGENT
+
+**Prompt:**
 ```
-📊 Hook: 485 / 400–600 → OK → ghi 01-hook.txt
-📊 Diễn biến: 2,650 / 2500–3500 → OK → ghi 03-development.txt
+Bạn là NARRATOR SPECIALIST cho kaigai-script-writer.
+Phong cách mục tiêu: MC NHK đang tâm sự với khán giả — chuyên nghiệp nhưng có hồn.
+
+Nhiệm vụ: Rewrite draft thành văn phong Nhật thuần.
+KHÔNG thêm facts mới. KHÔNG thay đổi nội dung. Chỉ rewrite ngôn ngữ.
+Giữ độ dài ± 10% so với draft.
+
+=== JAPANESE STOP-SLOP RULES (BẮT BUỘC APPLY) ===
+
+[THROAT-CLEARING — Cắt hoặc viết thẳng vào điểm]
+・〜ということになります → viết thẳng điều đó là gì
+・〜と言えるでしょう → khẳng định thẳng, bỏ hedging
+・〜について見ていきましょう → bắt đầu thẳng vào nội dung
+・〜なのです（quá nhiều） → chỉ dùng khi thực sự muốn reveal/nhấn mạnh
+
+[FALSE AGENCY — Tìm chủ thể thực, viết cụ thể]
+・歴史が動きました → 大谷翔平が、野球の歴史を塗り替えました
+・注目が集まりました → 全米のメディアが、一斉に目を向けました
+・感動が広がりました → 球場にいた6万人が、涙をこらえられませんでした
+・世界が震えた → 世界中のスポーツファンが、この名前を呼びました
+
+[AI-TELL PATTERNS — Phát hiện và thay thế]
+・5+ câu liên tiếp kết 〜ました → xen kẽ: 〜のです、〜でした、〜ています、〜に他なりません
+・非常に/とても/大変 (adverb yếu) → mô tả cụ thể hơn hoặc bỏ
+・素晴らしい/感動的な (adjective generic) → biểu hiện cụ thể theo bảng dưới
+・Binary contrast lặp: 〜だけでなく、〜も liên tiếp → đổi cấu trúc câu
+
+[BIỂU HIỆN 日本語らしい — Bắt buộc thay thế từ generic]
+| Generic (tránh) | Authentic Japanese (dùng) |
+|-----------------|--------------------------|
+| 驚きました | 言葉を失いました / 目を見開きました / 声を失いました |
+| 感動しました | 胸を打たれました / 涙がこぼれました / 胸が熱くなりました |
+| 注目しました | 目が釘付けになりました / 視線が集まりました |
+| 重要でした | 〜に他なりませんでした / 計り知れない意味を持っていました |
+| 成功しました | 見事にやり遂げました / 歴史に名を刻みました |
+| 世界が注目した | 世界中の目が、一点に注がれました |
+| すごかった | 〜の右に出る者はいませんでした |
+| 大きな歓声 | 球場が、まるで爆発したかのような歓声に包まれました |
+| 人々が驚いた | スタジアム全体が、静まり返りました |
+| 彼は感情的になった | 彼は、言葉が出てきませんでした |
+
+[TTS RHYTHM — Bắt buộc]
+・Câu lý tưởng: 30–50 ký tự | Câu tối đa: 60 ký tự (không ngoại lệ)
+・Xen kẽ câu ngắn (20–30) và câu trung bình (35–50)
+・Không lặp cùng mẫu kết câu >2 lần liên tiếp
+・Dùng 、 tạo pause ngắn, 。 tạo pause dài
+
+Output: Rewritten text tiếng Nhật, plain text.
 ```
 
-**Nếu OK (trong target):**
-- Ghi nội dung vào file phần tương ứng (ví dụ: `01-hook.txt`)
-- Chuyển sang phần tiếp theo
+---
 
-**Nếu UNDER (dưới target min):**
-- Ghi bản hiện tại vào file phần (nếu chưa có) hoặc giữ nguyên file
-- Move file sang `bak/` với tên `{tên}_v{n}.txt` (ví dụ: `bak/01-hook_v1.txt`)
-- Tạo `bak/` nếu chưa tồn tại
-- Quay lại Bước 2, mở rộng phần đó bằng cách:
-  - Thêm chi tiết cảm xúc hoặc bối cảnh
-  - Thêm beat change hoặc transition
-  - Mở rộng mô tả khoảnh khắc quan trọng
-  - Thêm phản ứng hoặc góc nhìn mới
-- Đếm lại và verify lần nữa
-- Khi OK → ghi file phần mới
-- Lặp lại cho đến khi đạt target min
+### REVIEWER AGENT
 
-**Nếu OVER (trên target max):**
-- Move file hiện tại sang `bak/` (tương tự UNDER)
-- Cắt bớt câu lặp ý hoặc mô tả thừa
-- Đếm lại và verify
-- Khi OK → ghi file phần mới
+**Prompt:**
+```
+Bạn là REVIEWER cho kaigai-script-writer.
+Nhiệm vụ: Đánh giá section theo checklist binary. Mỗi item: PASS hoặc FAIL.
 
-**Mapping tên file phần:**
-| Phần | File |
-|------|------|
-| Hook | `01-hook.txt` |
-| Bối cảnh | `02-context.txt` |
-| Diễn biến | `03-development.txt` |
-| Phản ứng QT | `04-reactions.txt` |
-| Kết luận | `05-conclusion.txt` |
+CHECKLIST:
 
-### Bước 4: FINAL REPORT + MERGE (BẮT BUỘC — sau khi cả 5 file phần đều OK)
+【文体 — Văn phong】
+□ Không có false agency (sự vật làm hành động của người)
+□ SOV order tự nhiên — không đảo ngược kiểu dịch từ tiếng Anh/Việt
+□ です/ます nhất quán — không trộn thể thường trong cùng đoạn
 
-**4a. Hiển thị bảng tổng kết:**
+【感情 — Cảm xúc】
+□ Câu đầu tiên tạo đúng emotional entry:
+  Hook → sốc/tò mò | Bối cảnh → bình tĩnh | Diễn biến → căng thẳng
+  Phản ứng QT → tự hào | Kết luận → dư âm sâu lắng
+□ Câu kết phần để lại đúng cảm xúc theo Emotional Arc Blueprint
+□ [Chỉ với Diễn biến] Có ít nhất 3 beat changes rõ ràng
+
+【表現 — Biểu hiện】
+□ Không có AI-tell patterns tiếng Nhật (throat-clearing, false agency, generic adjectives)
+□ Ít nhất 2 biểu hiện 日本語らしい (không phải từ generic)
+□ Không có từ tiếng Anh nào trong text
+
+OUTPUT FORMAT BẮT BUỘC:
+- Tất cả PASS:
+  "✅ PASS — ghi file"
+
+- Có bất kỳ FAIL:
+  "⚠️ FAIL:
+  - 【文体/感情/表現】[tên item]: [lý do cụ thể 1 câu] → [gợi ý fix cụ thể 1 câu]
+  - ..."
+```
+
+---
+
+### SINGLE-AGENT FALLBACK MODE
+
+Khi Agent tool không khả dụng:
+```
+⚠️ Subagent không khả dụng — chạy single-agent mode
+```
+
+Claude chính thực hiện 3 bước tuần tự inline cho mỗi phần:
+
+1. **[WRITER mode]** Draft content theo CÔNG THỨC VIẾT TỪNG PHẦN — focus facts + beats + độ dài
+2. **[NARRATOR mode]** Rewrite theo Japanese Stop-Slop rules trong NARRATOR SPECIALIST prompt ở trên
+3. **[REVIEWER mode]** Tự check checklist — nếu có FAIL item, tự sửa 1 lần rồi ghi file
+
+Hiển thị:
+```
+🖊️ [WRITER] Draft [Tên phần]... ✅ [X] ký tự
+🎙️ [NARRATOR] Rewrite... ✅ xong
+📋 [REVIEWER] Kiểm tra... ✅ PASS / ⚠️ FAIL — sửa inline
+📄 Ghi [tên file]
+```
+
+---
+
+### FINAL REPORT + MERGE (sau khi cả 5 phần xong)
+
+**Hiển thị bảng tổng kết:**
 
 ```
 📊 CHARACTER COUNT REPORT
-| Phần | Target | Actual | Status |
-|------|--------|--------|--------|
-| Hook | 400–600 | [xxx] | OK/UNDER/OVER |
-| Bối cảnh | 700–1000 | [xxx] | OK/UNDER/OVER |
-| Diễn biến | 2500–3500 | [xxx] | OK/UNDER/OVER |
-| Phản ứng QT | 1200–1500 | [xxx] | OK/UNDER/OVER |
-| Kết luận | 400–600 | [xxx] | OK/UNDER/OVER |
-| **Tổng** | **5200–7100** | **[xxx]** | **OK/UNDER/OVER** |
+| Phần | Target | Actual | Quality |
+|------|--------|--------|---------|
+| Hook | 400–600 | [xxx] | PASS / WARNING |
+| Bối cảnh | 700–1000 | [xxx] | PASS / WARNING |
+| Diễn biến | 2500–3500 | [xxx] | PASS / WARNING |
+| Phản ứng QT | 1200–1500 | [xxx] | PASS / WARNING |
+| Kết luận | 400–600 | [xxx] | PASS / WARNING |
+| **Tổng** | **5200–7100** | **[xxx]** | |
 ```
 
-**4b. Merge:** Đọc `01-hook.txt` → `05-conclusion.txt` theo thứ tự, nối bằng 2 dòng trống → ghi `voiceover.txt`.
+**Merge:** Đọc `01-hook.txt` → `05-conclusion.txt` theo thứ tự, nối bằng 2 dòng trống → ghi `voiceover.txt`.
 
-**4c. Ghi `metadata.md`** với title options, thumbnail options, bảng character count.
+**Ghi `metadata.md`** với title options, thumbnail options, bảng character count.
 
-**4d. Verify:** Đọc lại `voiceover.txt` → đếm ký tự tổng → so khớp với FINAL REPORT.
+**Verify:** Đọc lại `voiceover.txt` → đếm ký tự tổng → so khớp với FINAL REPORT.
 
 ---
 

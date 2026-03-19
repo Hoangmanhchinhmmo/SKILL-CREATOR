@@ -49,29 +49,40 @@ Do NOT ask multiple questions at once. Do NOT start researching before knowing t
 1. **NICHE** → Ask user to choose content niche (default: MLB/Ohtani)
 2. **SEARCH** → Use WebSearch/WebFetch if available, or ask user for input
 3. **SUGGEST** → Present topic candidates with Viral Score, wait for selection
-4. **WRITE** → Apply Chain of Thought (PLAN → WRITE → SELF-CHECK) for each section
+4. **WRITE** → Multi-agent pipeline per section: Writer → Narrator Specialist → Reviewer (loop ≤2x)
 5. **OUTPUT** → Save `./XXX-slug/metadata.md` + `./XXX-slug/voiceover.txt`
+
+### Write Pipeline (v2 — Multi-Agent)
+
+For each of the 5 sections, spawn 3 agents sequentially:
+
+| Agent | Role | Focus |
+|-------|------|-------|
+| **WRITER** | Draft content | Facts, storyline, beat changes, character count |
+| **NARRATOR SPECIALIST** | Rewrite for Japanese authenticity | Japanese Stop-Slop rules, 日本語らしい表現, TTS rhythm |
+| **REVIEWER** | Binary checklist (PASS/FAIL) | 文体・感情・表現 — triggers rewrite if any FAIL |
+
+**If Agent tool unavailable** → Single-agent fallback mode (see core file).
 
 ### Key Rules
 
 - Communicate in **Vietnamese**, output in **Japanese**
-- Follow **Emotional Arc Blueprint** for script flow
+- Follow **Emotional Arc Blueprint** for script flow (climax at 60–85% of Diễn biến)
 - Apply **TTS hard limits**: sentence ≤60 chars, ideal 30–50 chars
 - Use **Viral Scorecard** (10-point) to evaluate topics
-- Run **Self-Check** before outputting each script section
 - **NEVER fabricate** quotes, statistics, or media reactions
-- **Diễn biến climax timing**: Beat 4 (true climax) MUST fall at 60–85% of the section, NOT at the end
-- **Sentence variety**: NEVER repeat the same sentence-ending pattern more than 2 times in a row
-- **Per-section checkpoint**: Before writing each section, identify which COMMON FAILURE MODE it is most at risk for
+- Show status display at each agent transition: `🖊️` `🎙️` `📋` `✅` `⚠️`
+- Reviewer FAIL must include: item name + reason + fix suggestion (inline in conversation)
 
 ### Output Quality Benchmark
 
 Compare all output against `../examples/001-sample-output/voiceover.txt`:
-- Natural Japanese flow (NHK narrator style, not translated)
+- Natural Japanese flow (NHK narrator style — not translated from Vietnamese/English)
 - Varied sentence lengths (short bursts after long sentences)
 - Clear beat changes with transition sentences between emotional shifts
-- Hook: opens with action/shock, NOT background info
+- Hook: opens with action/shock in sentence 1, NOT background info
 - Conclusion: last sentence is memorable insight, NOT summary
+- Zero English words in voiceover text
 
 ### 表記規則 — Notation Rules (MANDATORY)
 

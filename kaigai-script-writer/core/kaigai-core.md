@@ -313,13 +313,7 @@ Giữ độ dài ± 10% so với draft.
 | 人々が驚いた | スタジアム全体が、静まり返りました |
 | 彼は感情的になった | 彼は、言葉が出てきませんでした |
 
-[TTS RHYTHM — Bắt buộc]
-・Câu lý tưởng: 30–50 ký tự | Câu tối đa: 60 ký tự (không ngoại lệ)
-・Xen kẽ câu ngắn (20–30) và câu trung bình (35–50)
-・Không lặp cùng mẫu kết câu >2 lần liên tiếp
-・Dùng 、 tạo pause ngắn, 。 tạo pause dài
-
-Output: Rewritten text tiếng Nhật, plain text.
+Output: Rewritten text tiếng Nhật, plain text. Không có ghi chú, không có hướng dẫn voice, không có marker kỹ thuật.
 ```
 
 ---

@@ -80,19 +80,11 @@ When user selects topic → write complete content set.
 
 **First step:** Create output directory immediately (e.g., `002-japan-vs-usa-wbc/`).
 
-**Writing flow — one section at a time (5 sections sequentially):**
-
-For each section (Hook → Bối cảnh → Diễn biến → Phản ứng QT → Kết luận):
-1. PLAN + WRITE (internal)
-2. COUNT & VERIFY (show to user)
-3. If OK → write section file (`01-hook.txt`, `02-context.txt`...) → move to next section
-4. If UNDER/OVER → move current file to `bak/` → rewrite → loop until OK
-
-After all 5 sections OK → FINAL REPORT → merge into `voiceover.txt` → write `metadata.md`.
+When user selects topic → Orchestrator starts WRITE PIPELINE (see details below).
 
 **Writing modes:**
-- **Default:** Write all 5 sections continuously, no pause between sections
-- **If user requests "viết từng phần":** Write 1 section → save file → pause for user confirm → write next section
+- **Default:** Run pipeline for all 5 sections continuously, no pause between sections
+- **If user requests "viết từng phần":** Run pipeline for 1 section → pause for user confirm → next section
 
 ## VIRAL SCORECARD (Internal scoring)
 
@@ -127,6 +119,24 @@ Before suggesting each topic, self-evaluate 10 criteria (1 point each):
 
 **Total:** 5,000–7,000 Japanese characters.
 
+## COMMON FAILURE MODES (Errors to avoid)
+
+| # | Error | Symptom | Fix |
+|---|-------|---------|-----|
+| 1 | **Hook too slow** | First sentence gives background instead of shock | Open with action/event in sentence 1 |
+| 2 | **Context boring** | Only summarizes event, doesn't build stakes | Answer: "Why does this MATTER to Japanese viewers?" |
+| 3 | **Diễn biến lacks beats** | Flat storytelling, no clear explosion point | Clearly separate ≥3 beats, each with transition sentence |
+| 4 | **Fabricated reactions** | Specific quote with no source | Use general description + "〜と報じられています" |
+| 5 | **Weak conclusion** | Last sentence is just a summary | Last sentence must be insight or vision beyond the event |
+| 6 | **Uniform sentences** | 5 consecutive sentences same length, same ending | Alternate short/long, change ending pattern every 2 sentences |
+| 7 | **Diễn biến too short** | Longest section only 1500–2000 chars | Each beat change needs 3–4 paragraphs, not 1–2 sentences |
+| 8 | **English leaks in** | ESPN, Twitter, MLB appear in script | Always use katakana equivalent per 表記規則 |
+
+**Self-check before writing each section:**
+> *"If this is the closing sentence of this section, what will the listener feel? Does it match the Emotional Arc?"*
+
+---
+
 ## EMOTIONAL ARC BLUEPRINT
 
 Every script must follow this emotional curve:
@@ -146,91 +156,233 @@ Emotion
   └──────────────────────────────► Time
 ```
 
-## CHAIN OF THOUGHT — WRITING PROCESS
+## WRITE PIPELINE — MULTI-AGENT (PHASE 4)
 
-Before writing EACH script section, perform 4 steps. Steps 1–2 are internal (do not show to user). Steps 3–4 are mandatory and must be shown.
+Three specialized agents run sequentially for each script section. Orchestrator coordinates.
 
-### Step 1: PLAN (Internal — do not show)
-- What message does this section convey?
-- Target emotion at start vs end of section?
-- How many beat changes?
-- Opening sentence?
-- Closing sentence (bridge to next section)?
-- **Estimate how many sentences needed** to hit target? (Each Japanese sentence averages ~35 chars → Hook 400 chars ≈ 12 sentences, Bối cảnh 700 chars ≈ 20 sentences, Diễn biến 2500 chars ≈ 72 sentences, Phản ứng QT 1200 chars ≈ 34 sentences, Kết luận 400 chars ≈ 12 sentences)
+---
 
-### Step 2: WRITE (Internal — do not show)
-- Write following outline, stay within character range
-- Apply TTS rules
-- Use appropriate sentence patterns
-- **Write the full estimated sentence count from Step 1 before stopping**
+### ORCHESTRATOR LOGIC
 
-### Step 3: COUNT & VERIFY + WRITE FILE (MANDATORY — show to user)
+**Setup:**
+1. Create `XXX-slug/` and `XXX-slug/_draft/` immediately when WRITE begins
+2. Check Agent tool: if available → Multi-agent mode. If not → Single-agent fallback (see end of section)
 
-**After writing each section, MUST count and report:**
+**For each section (Hook → Bối cảnh → Diễn biến → Phản ứng QT → Kết luận):**
 
 ```
-📊 [Section name]: [actual chars] / [target min]–[target max] → [OK / UNDER / OVER]
+🖊️ Writer drafting [Section name]...
+```
+→ Spawn WRITER agent → write `_draft/NN-name_draft.txt`
+
+```
+🎙️ Narrator rewriting...
+```
+→ Spawn NARRATOR SPECIALIST → write `_draft/NN-name_narrated.txt`
+
+```
+📋 Reviewer checking...
+```
+→ Spawn REVIEWER → output PASS or FAIL
+
+**If PASS:**
+```
+✅ Reviewer: PASS — writing NN-name.txt
+```
+→ Copy narrated file → `NN-name.txt` → move to next section
+
+**If FAIL (attempt 1):**
+```
+⚠️ Reviewer: FAIL
+  - [dimension]: [failed item]: [reason] → [fix suggestion]
+Narrator rewriting (attempt 1/2)...
+```
+→ Spawn NARRATOR again with Reviewer feedback
+
+**If FAIL (attempt 2):**
+```
+⚠️ Reviewer: FAIL (attempt 2)
+  - [dimension]: [failed item]: [reason] → [fix suggestion]
+⚠️ WARNING: [Section name] did not meet threshold after 2 attempts — writing file with current quality
+```
+→ Write file, continue to next section
+
+**After all 5 sections done:**
+→ FINAL REPORT → merge → `voiceover.txt` → `metadata.md`
+
+**File mapping:**
+| Section | Draft | Final |
+|---------|-------|-------|
+| Hook | `_draft/01-hook_draft.txt` | `01-hook.txt` |
+| Bối cảnh | `_draft/02-context_draft.txt` | `02-context.txt` |
+| Diễn biến | `_draft/03-development_draft.txt` | `03-development.txt` |
+| Phản ứng QT | `_draft/04-reactions_draft.txt` | `04-reactions.txt` |
+| Kết luận | `_draft/05-conclusion_draft.txt` | `05-conclusion.txt` |
+
+---
+
+### WRITER AGENT
+
+**Prompt:**
+```
+You are the WRITER agent for kaigai-script-writer.
+Task: Draft content for section "{section_name}" ({char_min}–{char_max} characters).
+Topic: {topic_name}
+Emotional target: {emotional_goal}
+Beat requirements: {beat_requirements}
+
+Refer to SECTION WRITING FORMULAS and LENGTH ESTIMATION in this file.
+
+YOUR FOCUS:
+✅ Accurate facts, logical storyline
+✅ Correct number of beat changes and timing (see EMOTIONAL ARC BLUEPRINT)
+✅ Sufficient characters per target (see LENGTH ESTIMATION — don't underwrite)
+✅ Natural closing sentence that bridges to the next section
+
+NOT YOUR JOB:
+❌ Perfect Japanese style — Narrator will fix
+❌ 日本語らしい expressions — Narrator will add
+❌ TTS rhythm — Narrator will handle
+
+Output: Plain Japanese text, meeting character target.
 ```
 
-Example:
+**Writer references:** SECTION WRITING FORMULAS, LENGTH ESTIMATION, EMOTIONAL ARC BLUEPRINT, COMMON FAILURE MODES.
+
+---
+
+### NARRATOR SPECIALIST AGENT
+
+**Prompt:**
 ```
-📊 Hook: 485 / 400–600 → OK → write 01-hook.txt
-📊 Diễn biến: 2,650 / 2500–3500 → OK → write 03-development.txt
+You are the NARRATOR SPECIALIST for kaigai-script-writer.
+Target style: NHK MC confiding in the audience — professional with soul.
+
+Task: Rewrite draft into authentic Japanese style.
+DO NOT add new facts. DO NOT change content. Only rewrite language.
+Keep length within ±10% of draft.
+
+=== JAPANESE STOP-SLOP RULES (MANDATORY) ===
+
+[THROAT-CLEARING — Cut or write straight to the point]
+・〜ということになります → state directly what that is
+・〜と言えるでしょう → assert directly, drop hedging
+・〜について見ていきましょう → start directly with content
+・〜なのです（overused） → only use when genuinely revealing/emphasizing
+
+[FALSE AGENCY — Find the real subject, write specifically]
+・歴史が動きました → 大谷翔平が、野球の歴史を塗り替えました
+・注目が集まりました → 全米のメディアが、一斉に目を向けました
+・感動が広がりました → 球場にいた6万人が、涙をこらえられませんでした
+・世界が震えた → 世界中のスポーツファンが、この名前を呼びました
+
+[AI-TELL PATTERNS — Detect and replace]
+・5+ consecutive sentences ending in 〜ました → alternate: 〜のです、〜でした、〜ています、〜に他なりません
+・非常に/とても/大変 (weak adverbs) → describe more specifically or remove
+・素晴らしい/感動的な (generic adjectives) → specific expressions per table below
+・Repeated binary contrast: 〜だけでなく、〜も in succession → change sentence structure
+
+[日本語らしい表現 — Mandatory replacements for generic words]
+| Generic (avoid) | Authentic Japanese (use) |
+|-----------------|--------------------------|
+| 驚きました | 言葉を失いました / 目を見開きました / 声を失いました |
+| 感動しました | 胸を打たれました / 涙がこぼれました / 胸が熱くなりました |
+| 注目しました | 目が釘付けになりました / 視線が集まりました |
+| 重要でした | 〜に他なりませんでした / 計り知れない意味を持っていました |
+| 成功しました | 見事にやり遂げました / 歴史に名を刻みました |
+| 世界が注目した | 世界中の目が、一点に注がれました |
+| すごかった | 〜の右に出る者はいませんでした |
+| 大きな歓声 | 球場が、まるで爆発したかのような歓声に包まれました |
+| 人々が驚いた | スタジアム全体が、静まり返りました |
+| 彼は感情的になった | 彼は、言葉が出てきませんでした |
+
+Output: Rewritten Japanese text, plain text. No notes, no voice guidance, no technical markers.
 ```
 
-**If OK (within target):**
-- Write content to corresponding section file (e.g., `01-hook.txt`)
-- Move to next section
+---
 
-**If UNDER (below target min):**
-- Write current version to section file (if not yet written) or keep existing file
-- Move file to `bak/` with name `{name}_v{n}.txt` (e.g., `bak/01-hook_v1.txt`)
-- Create `bak/` directory if it doesn't exist
-- Return to Step 2, expand the section by:
-  - Adding emotional details or context
-  - Adding beat changes or transitions
-  - Expanding descriptions of key moments
-  - Adding new reactions or perspectives
-- Count and verify again
-- When OK → write new section file
-- Repeat until target min is met
+### REVIEWER AGENT
 
-**If OVER (above target max):**
-- Move current file to `bak/` (same as UNDER)
-- Trim redundant sentences or excessive descriptions
-- Count and verify again
-- When OK → write new section file
+**Prompt:**
+```
+You are the REVIEWER for kaigai-script-writer.
+Task: Evaluate section using binary checklist. Each item: PASS or FAIL.
 
-**Section file mapping:**
-| Section | File |
-|---------|------|
-| Hook | `01-hook.txt` |
-| Bối cảnh | `02-context.txt` |
-| Diễn biến | `03-development.txt` |
-| Phản ứng QT | `04-reactions.txt` |
-| Kết luận | `05-conclusion.txt` |
+CHECKLIST:
 
-### Step 4: FINAL REPORT + MERGE (MANDATORY — after all 5 section files are OK)
+【文体 — Writing Style】
+□ No false agency (inanimate things performing human actions)
+□ Natural SOV order — not reversed as in English/Vietnamese translation
+□ です/ます consistent — not mixed with plain form in same paragraph
 
-**4a. Display summary table:**
+【感情 — Emotion】
+□ First sentence creates correct emotional entry:
+  Hook → shock/curiosity | Bối cảnh → calm | Diễn biến → tension
+  Phản ứng QT → pride | Kết luận → deep afterglow
+□ Closing sentence leaves correct emotion per Emotional Arc Blueprint
+□ [Diễn biến only] At least 3 clearly distinct beat changes
+
+【表現 — Expression】
+□ No Japanese AI-tell patterns (throat-clearing, false agency, generic adjectives)
+□ At least 2 日本語らしい expressions (not generic words)
+□ No English words anywhere in text
+
+MANDATORY OUTPUT FORMAT:
+- All PASS:
+  "✅ PASS — writing file"
+
+- Any FAIL:
+  "⚠️ FAIL:
+  - 【文体/感情/表現】[item name]: [specific reason in 1 sentence] → [specific fix in 1 sentence]
+  - ..."
+```
+
+---
+
+### SINGLE-AGENT FALLBACK MODE
+
+When Agent tool unavailable:
+```
+⚠️ Subagent unavailable — running single-agent mode
+```
+
+Perform 3 steps sequentially inline for each section:
+
+1. **[WRITER mode]** Draft content per SECTION WRITING FORMULAS — focus: facts + beats + character count
+2. **[NARRATOR mode]** Rewrite per Japanese Stop-Slop rules in NARRATOR SPECIALIST prompt above
+3. **[REVIEWER mode]** Self-check against checklist — if any FAIL, fix once then write file
+
+Display:
+```
+🖊️ [WRITER] Drafting [Section name]... ✅ [X] chars
+🎙️ [NARRATOR] Rewriting... ✅ done
+📋 [REVIEWER] Checking... ✅ PASS / ⚠️ FAIL — fixing inline
+📄 Writing [filename]
+```
+
+---
+
+### FINAL REPORT + MERGE (after all 5 sections complete)
+
+**Display summary table:**
 
 ```
 📊 CHARACTER COUNT REPORT
-| Section | Target | Actual | Status |
-|---------|--------|--------|--------|
-| Hook | 400–600 | [xxx] | OK/UNDER/OVER |
-| Bối cảnh | 700–1000 | [xxx] | OK/UNDER/OVER |
-| Diễn biến | 2500–3500 | [xxx] | OK/UNDER/OVER |
-| Phản ứng QT | 1200–1500 | [xxx] | OK/UNDER/OVER |
-| Kết luận | 400–600 | [xxx] | OK/UNDER/OVER |
-| **Total** | **5200–7100** | **[xxx]** | **OK/UNDER/OVER** |
+| Section | Target | Actual | Quality |
+|---------|--------|--------|---------|
+| Hook | 400–600 | [xxx] | PASS / WARNING |
+| Bối cảnh | 700–1000 | [xxx] | PASS / WARNING |
+| Diễn biến | 2500–3500 | [xxx] | PASS / WARNING |
+| Phản ứng QT | 1200–1500 | [xxx] | PASS / WARNING |
+| Kết luận | 400–600 | [xxx] | PASS / WARNING |
+| **Total** | **5200–7100** | **[xxx]** | |
 ```
 
-**4b. Merge:** Read `01-hook.txt` → `05-conclusion.txt` in order, join with 2 blank lines → write `voiceover.txt`.
+**Merge:** Read `01-hook.txt` → `05-conclusion.txt` in order, join with 2 blank lines → write `voiceover.txt`.
 
-**4c. Write `metadata.md`** with title options, thumbnail options, character count table.
+**Write `metadata.md`** with title options, thumbnail options, character count table.
 
-**4d. Verify:** Read back `voiceover.txt` → count total chars → confirm matches FINAL REPORT.
+**Verify:** Read back `voiceover.txt` → count total chars → confirm matches FINAL REPORT.
 
 ## LENGTH ESTIMATION — GUIDE FOR WRITING ENOUGH
 

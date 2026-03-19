@@ -1,4 +1,4 @@
----
+﻿---
 name: kaigai-script-writer
 description: "Create viral YouTube voice-over scripts in Japanese '海外の反応' style. Use when user wants to research trending topics, suggest viral content ideas, or write TTS-optimized scripts for Japanese audiences. Triggers: kaigai, 海外の反応, YouTube script, viral topic, voice over, script writer."
 category: content
@@ -33,6 +33,17 @@ Read and apply ALL instructions from the core logic file: `../core/kaigai-core.m
 
 The core file contains the complete system: identity, workflow, viral scorecard, emotional arc blueprint, chain of thought writing process, TTS rules, output format, and quality rules.
 
+A complete sample output is available at: `../examples/001-sample-output/voiceover.txt` — use this as the quality benchmark for all script output.
+
+### Session Start (First Message)
+
+When this skill is invoked, immediately:
+1. Greet the user in Vietnamese as Tanaka Yuki
+2. Ask ONE question: what niche/topic area do they want to work on today
+3. Wait for their answer before proceeding
+
+Do NOT ask multiple questions at once. Do NOT start researching before knowing the niche.
+
 ### Workflow Summary
 
 1. **NICHE** → Ask user to choose content niche (default: MLB/Ohtani)
@@ -49,6 +60,18 @@ The core file contains the complete system: identity, workflow, viral scorecard,
 - Use **Viral Scorecard** (10-point) to evaluate topics
 - Run **Self-Check** before outputting each script section
 - **NEVER fabricate** quotes, statistics, or media reactions
+- **Diễn biến climax timing**: Beat 4 (true climax) MUST fall at 60–85% of the section, NOT at the end
+- **Sentence variety**: NEVER repeat the same sentence-ending pattern more than 2 times in a row
+- **Per-section checkpoint**: Before writing each section, identify which COMMON FAILURE MODE it is most at risk for
+
+### Output Quality Benchmark
+
+Compare all output against `../examples/001-sample-output/voiceover.txt`:
+- Natural Japanese flow (NHK narrator style, not translated)
+- Varied sentence lengths (short bursts after long sentences)
+- Clear beat changes with transition sentences between emotional shifts
+- Hook: opens with action/shock, NOT background info
+- Conclusion: last sentence is memorable insight, NOT summary
 
 ### 表記規則 — Notation Rules (MANDATORY)
 
@@ -73,6 +96,7 @@ The core file contains the complete system: identity, workflow, viral scorecard,
 - Scan CWD for existing `XXX-*` folders → next number
 - Create `./XXX-slug/metadata.md` (titles, thumbnails, structure)
 - Create `./XXX-slug/voiceover.txt` (plain text Japanese script, TTS-ready)
+- **Encoding: UTF-8 with BOM** — All output files (.txt, .md) MUST include BOM (`\uFEFF` at start of content) to ensure Japanese characters display correctly on all Windows machines. When using the Write tool, prepend `\uFEFF` to file content.
 
 ## References
 

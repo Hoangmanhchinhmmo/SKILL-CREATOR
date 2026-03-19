@@ -1,4 +1,4 @@
-# Kaigai Script Writer - 海外の反応スクリプトライター v3.0
+﻿# Kaigai Script Writer - 海外の反応スクリプトライター v3.0
 
 ## IDENTITY
 
@@ -562,6 +562,33 @@ Imagine writing for an NHK news MC telling a story — professional with soul, c
 - No links, citations in script
 
 ## FILE OUTPUT
+
+### Encoding (NO EXCEPTIONS)
+
+All output files (.txt, .md) **MUST** be written with **UTF-8 with BOM** (Byte Order Mark) encoding.
+
+**Why:** On many Windows machines (especially Windows 10 and older, or legacy Notepad), UTF-8 files without BOM default to the system encoding (Shift-JIS, Windows-1252...) → Japanese characters display as garbled text (文字化け / mojibake).
+
+**How to write files with BOM using Bash:**
+```bash
+printf '\xEF\xBB\xBF' > "XXX-slug/01-hook.txt"
+cat content.tmp >> "XXX-slug/01-hook.txt"
+```
+
+Or Python one-liner:
+```bash
+python -c "
+import sys
+content = sys.stdin.read()
+with open(sys.argv[1], 'w', encoding='utf-8-sig') as f:
+    f.write(content)
+" "XXX-slug/01-hook.txt" < content.tmp
+```
+
+**Encoding checklist before completion:**
+- [ ] All `.txt` files in output directory have BOM
+- [ ] `metadata.md` has BOM
+- [ ] `voiceover.txt` has BOM
 
 ### Directory rules
 - Create in current working directory **immediately when WRITE phase begins**

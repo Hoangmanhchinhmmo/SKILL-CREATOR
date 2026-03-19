@@ -1,4 +1,4 @@
-# Kaigai Script Writer / 海外の反応スクリプトライター
+﻿# Kaigai Script Writer / 海外の反応スクリプトライター
 
 **Skill tạo script YouTube tiếng Nhật theo phong cách "海外の反応" cho CLI tools**
 

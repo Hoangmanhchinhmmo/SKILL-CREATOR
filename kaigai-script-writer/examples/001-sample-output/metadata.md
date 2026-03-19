@@ -1,4 +1,4 @@
-# Ohtani 50-50 - Kỷ lục lịch sử chưa từng có
+﻿# Ohtani 50-50 - Kỷ lục lịch sử chưa từng có
 
 - **Niche:** MLB / Shohei Ohtani
 - **Date:** 2025-01-01

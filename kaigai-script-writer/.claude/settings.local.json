@@ -2,7 +2,18 @@
   "permissions": {
     "allow": [
       "WebSearch",
-      "Bash(ls -d D:/CODE_2026/SKILL-CREATOR/kaigai-script-writer/[0-9][0-9][0-9]-* 2>/dev/null || echo \"NO_FOLDERS\")"
+      "Bash(ls -d D:/CODE_2026/SKILL-CREATOR/kaigai-script-writer/[0-9][0-9][0-9]-* 2>/dev/null || echo \"NO_FOLDERS\")",
+      "Bash(for f:*)",
+      "Bash(do if:*)",
+      "Bash(then printf:*)",
+      "Read(//d/CODE_2026/SKILL-CREATOR/kaigai-script-writer/**)",
+      "Bash(\"$f.tmp\")",
+      "Bash(mv \"$f.tmp\" \"$f\")",
+      "Bash(echo \"Added BOM to $f\")",
+      "Bash(else echo:*)",
+      "Bash(fi)",
+      "Bash(done)",
+      "Bash(echo:*)"
     ]
   }
 }

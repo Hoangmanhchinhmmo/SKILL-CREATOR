@@ -12,12 +12,15 @@ load_dotenv()
 GEMINI_API_KEY_WRITER = os.getenv("GEMINI_API_KEY_WRITER", "")
 GEMINI_API_KEY_EDITOR = os.getenv("GEMINI_API_KEY_EDITOR", "")
 GEMINI_API_KEY_ARCHITECT = os.getenv("GEMINI_API_KEY_ARCHITECT", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
 
-# Phân bổ key cho từng agent:
-# WRITER    → Agent 1 (データ収集), Agent 4 (台本作成)
-# EDITOR    → Agent 2 (戦術分析), Agent 5 (品質検査)
-# ARCHITECT → Agent 3 (独自視点)
+# === Gemini Model per step (cấu hình từ .env) ===
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
+GEMINI_MODEL_DATA = os.getenv("GEMINI_MODEL_DATA", GEMINI_MODEL)
+GEMINI_MODEL_ANALYSIS = os.getenv("GEMINI_MODEL_ANALYSIS", GEMINI_MODEL)
+GEMINI_MODEL_WRITER = os.getenv("GEMINI_MODEL_WRITER", GEMINI_MODEL)
+GEMINI_MODEL_SUPERVISOR = os.getenv("GEMINI_MODEL_SUPERVISOR", GEMINI_MODEL)
+
+# Phân bổ key + model cho từng agent
 AGENT_KEYS = {
     "data_collector": GEMINI_API_KEY_WRITER,
     "tactical_analyst": GEMINI_API_KEY_EDITOR,
@@ -26,14 +29,23 @@ AGENT_KEYS = {
     "quality_checker": GEMINI_API_KEY_EDITOR,
 }
 
+AGENT_MODELS = {
+    "data_collector": GEMINI_MODEL_DATA,
+    "tactical_analyst": GEMINI_MODEL_ANALYSIS,
+    "unique_perspective": GEMINI_MODEL_ANALYSIS,
+    "script_writer": GEMINI_MODEL_WRITER,
+    "quality_checker": GEMINI_MODEL_SUPERVISOR,
+}
+
 # === Output ===
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# === Agent Settings ===
-MAX_RETRIES = 2
-TEMPERATURE = 0.8  # Sáng tạo hơn cho podcast
-MAX_OUTPUT_TOKENS = 16384
+# === Agent Settings (cấu hình từ .env) ===
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
+TEMPERATURE = float(os.getenv("TEMPERATURE", "0.8"))
+SUPERVISOR_TEMPERATURE = float(os.getenv("SUPERVISOR_TEMPERATURE", "0.3"))
+MAX_OUTPUT_TOKENS = int(os.getenv("MAX_OUTPUT_TOKENS", "16384"))
 
 # === Podcast Formats ===
 FORMATS = {

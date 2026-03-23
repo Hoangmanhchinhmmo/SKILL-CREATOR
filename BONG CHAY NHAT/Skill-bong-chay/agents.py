@@ -5,18 +5,19 @@ Mỗi agent dùng API key riêng để phân tải và tránh rate limit.
 """
 
 import google.generativeai as genai
-from config import AGENT_KEYS, GEMINI_MODEL, TEMPERATURE, MAX_OUTPUT_TOKENS, TTS_RULES
+from config import AGENT_KEYS, AGENT_MODELS, GEMINI_MODEL, TEMPERATURE, MAX_OUTPUT_TOKENS, TTS_RULES
 
 
 def _call_gemini(system_prompt: str, user_input: str, agent_name: str) -> str:
-    """Gọi Gemini API với API key riêng cho từng agent."""
+    """Gọi Gemini API với API key + model riêng cho từng agent."""
     api_key = AGENT_KEYS.get(agent_name, "")
     if not api_key:
         raise ValueError(f"API key chưa được cấu hình cho agent: {agent_name}")
 
+    model_name = AGENT_MODELS.get(agent_name, GEMINI_MODEL)
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel(
-        model_name=GEMINI_MODEL,
+        model_name=model_name,
         system_instruction=system_prompt,
         generation_config=genai.GenerationConfig(
             temperature=TEMPERATURE,
@@ -24,7 +25,14 @@ def _call_gemini(system_prompt: str, user_input: str, agent_name: str) -> str:
         ),
     )
     response = model.generate_content(user_input)
-    return response.text
+    try:
+        return response.text
+    except ValueError:
+        if response.candidates:
+            parts = response.candidates[0].content.parts
+            if parts:
+                return parts[0].text
+        return ""
 
 
 # ============================================================

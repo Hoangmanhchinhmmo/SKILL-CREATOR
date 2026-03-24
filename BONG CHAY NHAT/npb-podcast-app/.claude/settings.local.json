@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -rf dist build)",
+      "Bash(python build.py)",
+      "Bash(python -m nuitka --version)",
+      "Bash(python -m nuitka --help)",
+      "Bash(cd:*)",
+      "Bash(pip show:*)",
+      "Bash(python -m flet --version)",
+      "Bash(python -c \"import flet; print\\(flet.version.version\\)\")",
+      "Bash(python -m flet pack --help)",
+      "Bash(python -m flet)",
+      "Bash(python -c \"from flet.cli import main; main\\(\\)\")",
+      "Bash(python -c \"from flet.cli import main; main\\(\\)\" pack --help)",
+      "Bash(python -c \"from flet.cli import main; main\\(\\)\" build --help)",
+      "Bash(python -c \"from flet.cli import main; main\\(\\)\" build windows --help)",
+      "Bash(python build.py --help)",
+      "Bash(python build.py pack)",
+      "Bash(PYTHONIOENCODING=utf-8 python build.py pack)",
+      "Bash(tasklist)",
+      "Bash(taskkill //F //PID 28252)",
+      "Bash(python -c \"import flet.cli; print\\(flet.cli.__file__\\)\")",
+      "Bash(python -c \"import flet; import os; print\\(os.path.dirname\\(flet.__file__\\)\\)\")",
+      "Bash(python:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python build.py clean)",
+      "Bash(pip install:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python build.py quick)"
+    ]
+  }
+}

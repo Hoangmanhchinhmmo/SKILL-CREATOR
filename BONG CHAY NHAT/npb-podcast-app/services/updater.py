@@ -61,7 +61,7 @@ def download_and_install(download_url: str) -> bool:
                 f.write(chunk)
 
         # Launch the new installer and exit current app
-        subprocess.Popen([exe_path], shell=True)
+        subprocess.Popen([exe_path])
         return True
 
     except Exception:

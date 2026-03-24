@@ -16,9 +16,26 @@ from db.models import (
 from services.machine_id import get_machine_code
 from services.crypto import decrypt
 
-# Add Skill-bong-chay to path
-SKILL_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "Skill-bong-chay")
-SKILL_DIR = os.path.abspath(SKILL_DIR)
+# Add Skill-bong-chay to path — search multiple locations for packaged builds
+_app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_candidates = [
+    # flet pack (onedir): Skill-bong-chay/ next to exe in same folder
+    os.path.join(os.path.dirname(os.path.abspath(sys.executable)), "Skill-bong-chay"),
+    # flet pack (onefile): PyInstaller temp dir
+    os.path.join(getattr(sys, "_MEIPASS", ""), "Skill-bong-chay"),
+    # Development: ../Skill-bong-chay relative to project root
+    os.path.join(_app_root, "..", "Skill-bong-chay"),
+    # flet build windows: app/Skill-bong-chay
+    os.path.join(_app_root, "Skill-bong-chay"),
+]
+SKILL_DIR = ""
+for _c in _candidates:
+    _c = os.path.abspath(_c)
+    if os.path.isdir(_c):
+        SKILL_DIR = _c
+        break
+if not SKILL_DIR:
+    SKILL_DIR = os.path.abspath(os.path.join(_app_root, "..", "Skill-bong-chay"))
 if SKILL_DIR not in sys.path:
     sys.path.insert(0, SKILL_DIR)
 

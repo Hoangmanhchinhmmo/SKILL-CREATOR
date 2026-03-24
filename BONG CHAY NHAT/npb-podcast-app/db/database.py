@@ -1,20 +1,30 @@
 """
 SQLite database connection and schema initialization.
-DB file: npb_podcast.db (same directory as main.py)
+DB file stored in %APPDATA%/NPB-Podcast-Writer/ (persistent across exe runs).
 """
 
 import sqlite3
 import os
+import sys
 
 DB_NAME = "npb_podcast.db"
+APP_DATA_DIR = "NPB-Podcast-Writer"
 _db_path = None
 
 
 def get_db_path() -> str:
-    """Get absolute path to database file."""
+    """Get absolute path to database file in persistent user data folder."""
     global _db_path
     if _db_path is None:
-        _db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), DB_NAME)
+        # Use %APPDATA% on Windows — survives PyInstaller onefile temp extraction
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            data_dir = os.path.join(appdata, APP_DATA_DIR)
+        else:
+            # Fallback: user home
+            data_dir = os.path.join(os.path.expanduser("~"), f".{APP_DATA_DIR}")
+        os.makedirs(data_dir, exist_ok=True)
+        _db_path = os.path.join(data_dir, DB_NAME)
     return _db_path
 
 

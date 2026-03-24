@@ -3,6 +3,23 @@ NPB Podcast Writer — Flet Desktop App
 Entry point: python main.py
 """
 
+import os
+import sys
+
+# Fix Flet desktop runtime path for packaged builds
+# flet pack (PyInstaller) handles this automatically, but we keep a fallback
+# for onedir builds where the runtime may be in a subdirectory
+if getattr(sys, "frozen", False):
+    _exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+    for _candidate in [
+        os.path.join(getattr(sys, "_MEIPASS", ""), "flet_desktop", "app", "flet"),  # flet pack (auto)
+        os.path.join(_exe_dir, "flet_desktop", "app", "flet"),  # onedir fallback
+        os.path.join(_exe_dir, "runtime", "flet"),               # manual copy fallback
+    ]:
+        if os.path.isdir(_candidate) and os.path.exists(os.path.join(_candidate, "flet.exe")):
+            os.environ["FLET_VIEW_PATH"] = _candidate
+            break
+
 import flet as ft
 from theme import (
     show_snackbar, show_dialog, close_dialog,

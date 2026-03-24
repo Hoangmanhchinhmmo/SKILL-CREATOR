@@ -1,0 +1,18 @@
+# Build artifacts
+dist/
+build/
+.buildenv/
+*.spec
+nuitka-crash-report.xml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Database (runtime, stored in %APPDATA%)
+*.db
+
+# Environment
+.env

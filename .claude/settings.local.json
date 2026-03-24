@@ -26,7 +26,23 @@
       "Bash(python:*)",
       "Bash(curl:*)",
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5YjI2ZWM3NjNmY2JkNDZhNGFhOWNlMCIsImVtYWlsIjoiYWRtaW5AZXhhbXBsZS5jb20iLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3NzQzMjY5MjQsImV4cCI6MTc3NDkzMTcyNH0.Sa68eLNqesGnmcy8MrtqVntDRg-xtugBL4_n0Mo_gM4\")",
-      "Bash(python -c \":*)"
+      "Bash(python -c \":*)",
+      "Bash(pip show:*)",
+      "Bash(where cl.exe)",
+      "Bash(where gcc.exe)",
+      "Bash(powershell -Command \"Add-MpPreference -ExclusionPath 'D:\\\\CODE_2026\\\\SKILL-CREATOR\\\\BONG CHAY NHAT\\\\npb-podcast-app\\\\dist'\" 2>&1)",
+      "Bash(rm:*)",
+      "Bash(timeout 30 ./NPB-Podcast-Writer.exe)",
+      "Bash(taskkill /F /IM \"NPB-Podcast-Writer.exe\")",
+      "Bash(taskkill //F //IM \"NPB-Podcast-Writer.exe\")",
+      "Bash(taskkill //F //IM \"flet.exe\")",
+      "Bash(timeout 20 ./NPB-Podcast-Writer.exe)",
+      "Bash(timeout 25 ./NPB-Podcast-Writer.exe)",
+      "Bash(flet pack:*)",
+      "Bash(flet build:*)",
+      "Bash(./NPB-Podcast-Writer.exe)",
+      "Bash(rm -f \"D:/CODE_2026/SKILL-CREATOR/BONG CHAY NHAT/npb-podcast-app/dist/NPB-Podcast-Writer.exe\")",
+      "Bash(rm -rf \"D:/CODE_2026/SKILL-CREATOR/BONG CHAY NHAT/npb-podcast-app/build\")"
     ]
   }
 }

@@ -1,0 +1,96 @@
+"""
+SQLite database connection and schema initialization.
+DB file: npb_podcast.db (same directory as main.py)
+"""
+
+import sqlite3
+import os
+
+DB_NAME = "npb_podcast.db"
+_db_path = None
+
+
+def get_db_path() -> str:
+    """Get absolute path to database file."""
+    global _db_path
+    if _db_path is None:
+        _db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), DB_NAME)
+    return _db_path
+
+
+def get_connection() -> sqlite3.Connection:
+    """Get a new SQLite connection with WAL mode and foreign keys."""
+    conn = sqlite3.connect(get_db_path())
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    return conn
+
+
+def init_db():
+    """Create all tables if they don't exist."""
+    conn = get_connection()
+    try:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS articles (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                topic       TEXT NOT NULL,
+                format      TEXT NOT NULL,
+                content     TEXT NOT NULL,
+                created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at  DATETIME
+            );
+
+            CREATE TABLE IF NOT EXISTS pipeline_runs (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                article_id  INTEGER REFERENCES articles(id) ON DELETE SET NULL,
+                status      TEXT NOT NULL DEFAULT 'running',
+                started_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+                finished_at DATETIME,
+                total_time  REAL
+            );
+
+            CREATE TABLE IF NOT EXISTS agent_logs (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id      INTEGER NOT NULL REFERENCES pipeline_runs(id) ON DELETE CASCADE,
+                agent_name  TEXT NOT NULL,
+                status      TEXT NOT NULL DEFAULT 'waiting',
+                attempt     INTEGER DEFAULT 1,
+                started_at  DATETIME,
+                finished_at DATETIME,
+                error_msg   TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS settings (
+                key         TEXT PRIMARY KEY,
+                value       TEXT NOT NULL,
+                encrypted   INTEGER DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS license_cache (
+                id           INTEGER PRIMARY KEY DEFAULT 1,
+                license_key  TEXT NOT NULL,
+                machine_code TEXT NOT NULL,
+                status       TEXT NOT NULL,
+                product      TEXT,
+                plan         TEXT,
+                expires_at   DATETIME,
+                verified_at  DATETIME,
+                token_data   TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_articles_created ON articles(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_pipeline_runs_status ON pipeline_runs(status);
+            CREATE INDEX IF NOT EXISTS idx_agent_logs_run ON agent_logs(run_id);
+        """)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_db_size() -> int:
+    """Get database file size in bytes."""
+    path = get_db_path()
+    if os.path.exists(path):
+        return os.path.getsize(path)
+    return 0

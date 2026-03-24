@@ -20,7 +20,10 @@
       "Bash(grep -E \"\\\\.\\(json|yaml|toml|config\\)$\")",
       "WebFetch(domain:geminicli.com)",
       "Bash(find /D/CODE_2026/skill-hub-mcp -name *mcp* -o -name *gemini*)",
-      "WebFetch(domain:agentpatch.ai)"
+      "WebFetch(domain:agentpatch.ai)",
+      "Bash(pip install:*)",
+      "Bash(timeout 15 python main.py)",
+      "Bash(python:*)"
     ]
   }
 }

@@ -96,21 +96,29 @@ class FirstLaunchView(ft.Column):
         self.message_text.color = TEXT_MUTED
         self._page.update()
 
-        result = license_service.activate(key)
+        # Run in background thread to avoid UI freeze
+        import threading
 
-        self.loading.visible = False
-        self.activate_btn.disabled = False
+        def _do_activate():
+            result = license_service.activate(key)
 
-        if result["success"]:
-            self.message_text.value = result["message"]
-            self.message_text.color = SUCCESS
-            self._page.update()
-            if self.on_activated:
-                self.on_activated()
-        else:
-            self.message_text.value = result["message"]
-            self.message_text.color = DANGER
-            self._page.update()
+            def _update_ui():
+                self.loading.visible = False
+                self.activate_btn.disabled = False
+                if result["success"]:
+                    self.message_text.value = result["message"]
+                    self.message_text.color = SUCCESS
+                    self._page.update()
+                    if self.on_activated:
+                        self.on_activated()
+                else:
+                    self.message_text.value = result["message"]
+                    self.message_text.color = DANGER
+                    self._page.update()
+
+            self._page.run_thread(_update_ui)
+
+        threading.Thread(target=_do_activate, daemon=True).start()
 
     def _copy_machine_code(self, e):
         self._page.set_clipboard(self.hw_info["machine_code"])

@@ -23,9 +23,10 @@ SIDEBAR_ITEMS = [
     SidebarItem(ft.Icons.LIST_ALT_ROUNDED, "Lịch sử", 2),
     SidebarItem(ft.Icons.EDIT_NOTE_ROUNDED, "Editor", 3),
     SidebarItem(ft.Icons.SETTINGS_ROUNDED, "Cấu hình", 4),
+    SidebarItem(ft.Icons.ADMIN_PANEL_SETTINGS_ROUNDED, "Quản lý Lic", 5),
 ]
 
-LICENSE_ITEM = SidebarItem(ft.Icons.KEY_ROUNDED, "License", 5)
+LICENSE_ITEM = SidebarItem(ft.Icons.KEY_ROUNDED, "License", 6)
 
 
 class MainLayout(ft.Column):

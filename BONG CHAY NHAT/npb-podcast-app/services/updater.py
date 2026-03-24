@@ -10,7 +10,7 @@ import requests
 from db.models import get_setting
 
 APP_VERSION = "1.0.0"
-DEFAULT_UPDATE_URL = "https://license.yourdomain.com/api/updates"
+DEFAULT_UPDATE_URL = "https://be.4mmo.top/api/updates"
 PRODUCT_SLUG = "npb-podcast-writer"
 REQUEST_TIMEOUT = 10
 

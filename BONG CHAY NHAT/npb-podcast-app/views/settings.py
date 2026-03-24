@@ -78,17 +78,6 @@ class SettingsTab(ft.Column):
         self.tokens_input = input_field(label="Max Output Tokens", value=self.vals.get(MAX_TOKENS, "16384"))
         self.retries_input = input_field(label="Max Retries", value=self.vals.get(MAX_RETRIES, "2"))
 
-        # Server URLs
-        self.license_url_input = input_field(
-            label="License Server URL",
-            value=self.vals.get(LICENSE_URL, "https://license.yourdomain.com/api"),
-            expand=True,
-        )
-        self.update_url_input = input_field(
-            label="Update Server URL",
-            value=self.vals.get(UPDATE_URL, "https://license.yourdomain.com/api/updates"),
-            expand=True,
-        )
 
         # Storage info
         db_size_mb = get_db_size() / (1024 * 1024)
@@ -132,13 +121,6 @@ class SettingsTab(ft.Column):
                     ft.Row([ft.Text("Supervisor Temperature:", size=13, color=TEXT_SECONDARY, width=180), self.sup_temp_slider, self.sup_temp_label]),
                     ft.Row([self.tokens_input, self.retries_input], spacing=16),
                 ], spacing=16),
-                **card_style(),
-            ),
-
-            # Server
-            self._section_header("Server"),
-            ft.Container(
-                content=ft.Column([self.license_url_input, self.update_url_input], spacing=12),
                 **card_style(),
             ),
 
@@ -227,10 +209,6 @@ class SettingsTab(ft.Column):
         set_setting(SUPERVISOR_TEMP, f"{self.sup_temp_slider.value:.1f}")
         set_setting(MAX_TOKENS, self.tokens_input.value.strip() or "16384")
         set_setting(MAX_RETRIES, self.retries_input.value.strip() or "2")
-
-        # Save server URLs
-        set_setting(LICENSE_URL, self.license_url_input.value.strip())
-        set_setting(UPDATE_URL, self.update_url_input.value.strip())
 
         self.save_msg.value = "Đã lưu!"
         self.save_msg.color = SUCCESS

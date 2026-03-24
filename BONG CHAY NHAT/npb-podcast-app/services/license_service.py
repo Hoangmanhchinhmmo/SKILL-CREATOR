@@ -14,7 +14,7 @@ from db.models import (
 from services.machine_id import get_machine_code
 from services.crypto import encrypt, decrypt
 
-DEFAULT_SERVER_URL = "https://license.yourdomain.com/api"
+DEFAULT_SERVER_URL = "https://be.4mmo.top/api"
 GRACE_PERIOD_HOURS = 24
 VERIFY_INTERVAL_HOURS = 4
 REQUEST_TIMEOUT = 15
@@ -23,7 +23,9 @@ REQUEST_TIMEOUT = 15
 def _get_server_url() -> str:
     """Get license server URL from settings or default."""
     url = get_setting("license_server_url")
-    return url if url else DEFAULT_SERVER_URL
+    if url and "yourdomain" not in url:
+        return url
+    return DEFAULT_SERVER_URL
 
 
 def activate(license_key: str) -> dict:
@@ -49,9 +51,11 @@ def activate(license_key: str) -> dict:
 
         if resp.status_code == 200 and body.get("success"):
             data = body.get("data", {})
-            product = data.get("product", {}).get("name", "")
-            plan = data.get("plan", {}).get("name", "")
-            expires_at = data.get("expiresAt", "")
+            # Response may nest under data.license or directly in data
+            lic_data = data.get("license", data)
+            product = lic_data.get("product", {}).get("name", "") if isinstance(lic_data.get("product"), dict) else ""
+            plan = lic_data.get("plan", {}).get("name", "") if isinstance(lic_data.get("plan"), dict) else ""
+            expires_at = lic_data.get("expiresAt", "")
 
             # Save encrypted to SQLite
             token_data = encrypt(json.dumps(data), machine_code)
@@ -106,11 +110,18 @@ def verify() -> dict:
         data = body.get("data", body)
 
         if data.get("valid"):
-            update_license_verified()
             grace = data.get("graceMode", False)
-            return {"valid": True, "grace": grace, "message": "License hợp lệ"}
+            if grace:
+                # Grace mode = device was reset/deactivated — treat as invalid, require re-activate
+                clear_license_cache()
+                return {"valid": False, "grace": False, "message": "Device đã bị reset. Cần kích hoạt lại."}
+            update_license_verified()
+            return {"valid": True, "grace": False, "message": "License hợp lệ"}
         else:
             reason = data.get("reason", "License không hợp lệ")
+            # License revoked/suspended/expired on server → clear local cache
+            if any(kw in reason.lower() for kw in ["revoked", "suspended", "not activated", "not found"]):
+                clear_license_cache()
             return {"valid": False, "grace": False, "message": reason}
 
     except (requests.ConnectionError, requests.Timeout):
@@ -144,6 +155,7 @@ def _check_offline_grace(cache: dict) -> dict:
 
 def check_on_startup() -> dict:
     """Check license on app startup.
+    ALWAYS verifies with server. Only falls back to grace if offline.
     Returns: {"valid": bool, "grace": bool, "message": str, "needs_activation": bool}
     """
     cache = get_license_cache()
@@ -156,21 +168,16 @@ def check_on_startup() -> dict:
         clear_license_cache()
         return {"valid": False, "grace": False, "message": "Máy khác, cần kích hoạt lại", "needs_activation": True}
 
-    # Check if verified recently (< 24h)
-    verified_at = cache.get("verified_at")
-    if verified_at:
-        try:
-            last = datetime.datetime.fromisoformat(verified_at)
-            elapsed_hours = (datetime.datetime.now() - last).total_seconds() / 3600
-            if elapsed_hours < VERIFY_INTERVAL_HOURS:
-                # Recently verified, skip network call
-                return {"valid": True, "grace": False, "message": "OK", "needs_activation": False}
-        except (ValueError, TypeError):
-            pass
-
-    # Need to verify with server
+    # ALWAYS verify with server on startup — catch revoke/reset immediately
     result = verify()
-    result["needs_activation"] = not result["valid"] and not result["grace"]
+
+    # If server says invalid and not in grace → clear cache, force re-activation
+    if not result["valid"] and not result["grace"]:
+        clear_license_cache()
+        result["needs_activation"] = True
+    else:
+        result["needs_activation"] = False
+
     return result
 
 

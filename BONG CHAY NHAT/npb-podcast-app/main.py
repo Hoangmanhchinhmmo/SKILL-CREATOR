@@ -20,6 +20,7 @@ from views.pipeline import PipelineTab
 from views.history import HistoryTab
 from views.editor import EditorTab
 from views.settings import SettingsTab
+from views.admin_license import AdminLicenseTab
 
 
 def main(page: ft.Page):
@@ -57,9 +58,10 @@ def main(page: ft.Page):
         history = HistoryTab(page, on_edit=on_edit_article, on_rerun=on_rerun_article)
         editor = EditorTab(page)
         settings = SettingsTab(page)
+        admin_license = AdminLicenseTab(page)
         license_tab = LicenseTab(page, on_deactivated=on_deactivated)
 
-        views = [dashboard, pipeline_tab, history, editor, settings, license_tab]
+        views = [dashboard, pipeline_tab, history, editor, settings, admin_license, license_tab]
 
         layout = MainLayout(page, views)
 
@@ -136,20 +138,47 @@ def main(page: ft.Page):
 
     # === Startup: Check license ===
     # DEV MODE: Set to True to bypass license check for UI testing
-    DEV_BYPASS_LICENSE = True
+    DEV_BYPASS_LICENSE = False
 
     if DEV_BYPASS_LICENSE:
         build_main_app()
         layout.set_license_status("● DEV MODE", valid=True)
     else:
-        result = license_service.check_on_startup()
+        # Show loading while checking license
+        loading_view = ft.Column(
+            [
+                ft.Container(height=200),
+                ft.Icon(ft.Icons.PODCASTS_ROUNDED, size=64, color=ACCENT),
+                ft.Text("NPB Podcast Writer", size=28, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+                ft.Container(height=20),
+                ft.ProgressRing(width=30, height=30, stroke_width=3, color=ACCENT),
+                ft.Text("Đang kiểm tra license...", size=13, color="#A1A1AA"),
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER,
+            expand=True,
+        )
+        page.add(loading_view)
+        page.update()
 
-        if result.get("needs_activation"):
-            show_first_launch()
-        else:
-            build_main_app()
-            if result.get("grace"):
-                show_snackbar(page, f"⚠ {result['message']}", 5000, "#EAB308")
+        import threading
+
+        def _check_license():
+            result = license_service.check_on_startup()
+
+            def _apply():
+                page.controls.clear()
+                page.update()
+                if result.get("needs_activation"):
+                    show_first_launch()
+                else:
+                    build_main_app()
+                    if result.get("grace"):
+                        show_snackbar(page, f"⚠ {result['message']}", 5000, "#EAB308")
+
+            page.run_thread(_apply)
+
+        threading.Thread(target=_check_license, daemon=True).start()
 
 
 ft.run(main)

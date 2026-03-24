@@ -23,7 +23,10 @@
       "WebFetch(domain:agentpatch.ai)",
       "Bash(pip install:*)",
       "Bash(timeout 15 python main.py)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5YjI2ZWM3NjNmY2JkNDZhNGFhOWNlMCIsImVtYWlsIjoiYWRtaW5AZXhhbXBsZS5jb20iLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3NzQzMjY5MjQsImV4cCI6MTc3NDkzMTcyNH0.Sa68eLNqesGnmcy8MrtqVntDRg-xtugBL4_n0Mo_gM4\")",
+      "Bash(python -c \":*)"
     ]
   }
 }

@@ -220,3 +220,37 @@ def get_license_info() -> dict | None:
         "expires_at": cache.get("expires_at", ""),
         "verified_at": cache.get("verified_at", ""),
     }
+
+
+def get_days_remaining() -> dict:
+    """Calculate remaining days for the license.
+    Returns: {"days": int, "expired": bool, "expires_at": str, "total_estimate": int}
+    """
+    cache = get_license_cache()
+    if not cache or not cache.get("expires_at"):
+        return {"days": 0, "expired": True, "expires_at": "", "total_estimate": 0}
+
+    try:
+        expires_str = cache["expires_at"]
+        # Handle both ISO format and date-only
+        if "T" in expires_str:
+            expires_dt = datetime.datetime.fromisoformat(expires_str.replace("Z", "+00:00"))
+            now = datetime.datetime.now(datetime.timezone.utc)
+        else:
+            expires_dt = datetime.datetime.strptime(expires_str, "%Y-%m-%d")
+            now = datetime.datetime.now()
+
+        delta = expires_dt - now
+        days = delta.days
+
+        # Estimate total days (use 365 as default, or actual remaining if larger)
+        total_estimate = max(365, abs(days) + 30)
+
+        return {
+            "days": days,
+            "expired": days < 0,
+            "expires_at": expires_str,
+            "total_estimate": total_estimate,
+        }
+    except (ValueError, TypeError):
+        return {"days": 0, "expired": True, "expires_at": cache.get("expires_at", ""), "total_estimate": 0}

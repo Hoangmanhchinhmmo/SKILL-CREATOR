@@ -37,7 +37,6 @@ from views.pipeline import PipelineTab
 from views.history import HistoryTab
 from views.editor import EditorTab
 from views.settings import SettingsTab
-from views.admin_license import AdminLicenseTab
 
 
 def main(page: ft.Page):
@@ -75,10 +74,13 @@ def main(page: ft.Page):
         history = HistoryTab(page, on_edit=on_edit_article, on_rerun=on_rerun_article)
         editor = EditorTab(page)
         settings = SettingsTab(page)
-        admin_license = AdminLicenseTab(page)
-        license_tab = LicenseTab(page, on_deactivated=on_deactivated)
+        def on_update_available(available: bool):
+            if layout:
+                layout.set_update_badge(available)
 
-        views = [dashboard, pipeline_tab, history, editor, settings, admin_license, license_tab]
+        license_tab = LicenseTab(page, on_deactivated=on_deactivated, on_update_available=on_update_available)
+
+        views = [dashboard, pipeline_tab, history, editor, settings, license_tab]
 
         layout = MainLayout(page, views)
 

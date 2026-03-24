@@ -23,10 +23,9 @@ SIDEBAR_ITEMS = [
     SidebarItem(ft.Icons.LIST_ALT_ROUNDED, "Lịch sử", 2),
     SidebarItem(ft.Icons.EDIT_NOTE_ROUNDED, "Editor", 3),
     SidebarItem(ft.Icons.SETTINGS_ROUNDED, "Cấu hình", 4),
-    SidebarItem(ft.Icons.ADMIN_PANEL_SETTINGS_ROUNDED, "Quản lý Lic", 5),
 ]
 
-LICENSE_ITEM = SidebarItem(ft.Icons.KEY_ROUNDED, "License", 6)
+LICENSE_ITEM = SidebarItem(ft.Icons.KEY_ROUNDED, "License", 5)
 
 
 class MainLayout(ft.Column):
@@ -38,6 +37,7 @@ class MainLayout(ft.Column):
         self.views = views
         self.on_tab_change_callback = on_tab_change
         self.active_index = 0
+        self._update_badge_visible = False
 
         # Build sidebar
         self.sidebar = self._build_sidebar()
@@ -124,14 +124,31 @@ class MainLayout(ft.Column):
         icon_color = ACCENT if is_active else TEXT_MUTED
         left_border = ft.border.only(left=ft.BorderSide(3, ACCENT)) if is_active else None
 
+        icon_btn = ft.IconButton(
+            icon=item.icon,
+            icon_color=icon_color,
+            icon_size=22,
+            tooltip=item.label,
+            on_click=lambda e, idx=item.index: self._on_nav_click(idx),
+        )
+
+        # Show update badge on License tab
+        show_badge = (item.index == LICENSE_ITEM.index and self._update_badge_visible)
+        if show_badge:
+            content = ft.Stack([
+                icon_btn,
+                ft.Container(
+                    width=8, height=8,
+                    bgcolor="#EF4444",
+                    border_radius=4,
+                    top=6, right=6,
+                ),
+            ], width=44, height=44)
+        else:
+            content = icon_btn
+
         btn = ft.Container(
-            content=ft.IconButton(
-                icon=item.icon,
-                icon_color=icon_color,
-                icon_size=22,
-                tooltip=item.label,
-                on_click=lambda e, idx=item.index: self._on_nav_click(idx),
-            ),
+            content=content,
             border=left_border,
             border_radius=4,
             height=44,
@@ -169,4 +186,12 @@ class MainLayout(ft.Column):
     def set_license_status(self, text: str, valid: bool = True):
         self.license_status.value = text
         self.license_status.color = SUCCESS if valid else TEXT_MUTED
+        self._page.update()
+
+    def set_update_badge(self, visible: bool):
+        """Show/hide update available badge on License sidebar icon."""
+        if self._update_badge_visible == visible:
+            return
+        self._update_badge_visible = visible
+        self.sidebar.content = self._build_sidebar().content
         self._page.update()

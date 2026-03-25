@@ -42,7 +42,13 @@
       "Bash(flet build:*)",
       "Bash(./NPB-Podcast-Writer.exe)",
       "Bash(rm -f \"D:/CODE_2026/SKILL-CREATOR/BONG CHAY NHAT/npb-podcast-app/dist/NPB-Podcast-Writer.exe\")",
-      "Bash(rm -rf \"D:/CODE_2026/SKILL-CREATOR/BONG CHAY NHAT/npb-podcast-app/build\")"
+      "Bash(rm -rf \"D:/CODE_2026/SKILL-CREATOR/BONG CHAY NHAT/npb-podcast-app/build\")",
+      "Bash(ls \"d:/CODE_2026/9router/.env\"*)",
+      "Bash(ls \"d:/CODE_2026/9router/data/\"*.json)",
+      "Bash(nlm research:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c \":*)",
+      "Bash(ls D:/CODE_2026/SKILL-CREATOR/BONG CHAY NHAT/npb-podcast-app/*.spec)",
+      "Bash(ls D:/CODE_2026/SKILL-CREATOR/BONG CHAY NHAT/npb-podcast-app/*.py)"
     ]
   }
 }

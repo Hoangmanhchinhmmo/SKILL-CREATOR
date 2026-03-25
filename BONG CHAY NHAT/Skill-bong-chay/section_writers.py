@@ -1,35 +1,11 @@
 """
 Section Writers — Mỗi agent viết 1 phần cụ thể của podcast.
 Supervisor sẽ review từng phần, yêu cầu viết lại nếu cần.
+Hỗ trợ route qua 9router khi ROUTER_URL được cấu hình.
 """
 
-import google.generativeai as genai
-from config import AGENT_KEYS, AGENT_MODELS, GEMINI_MODEL, TEMPERATURE, MAX_OUTPUT_TOKENS, TTS_RULES
-
-
-def _call_gemini(system_prompt: str, user_input: str, agent_key: str) -> str:
-    api_key = AGENT_KEYS.get(agent_key, "")
-    if not api_key:
-        raise ValueError(f"API key not configured: {agent_key}")
-    model_name = AGENT_MODELS.get(agent_key, GEMINI_MODEL)
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(
-        model_name=model_name,
-        system_instruction=system_prompt,
-        generation_config=genai.GenerationConfig(
-            temperature=TEMPERATURE,
-            max_output_tokens=MAX_OUTPUT_TOKENS,
-        ),
-    )
-    response = model.generate_content(user_input)
-    try:
-        return response.text
-    except ValueError:
-        if response.candidates:
-            parts = response.candidates[0].content.parts
-            if parts:
-                return parts[0].text
-        return ""
+from agents import _call_gemini
+from config import TTS_RULES
 
 
 # === Shared TTS rules for all writers ===

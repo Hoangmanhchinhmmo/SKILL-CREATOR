@@ -4,10 +4,18 @@ Supervisor Agent — Giám sát chất lượng từng phần podcast.
 Nhận output từ mỗi Section Writer, đánh giá theo checklist,
 nếu FAIL → yêu cầu viết lại (tối đa 2 lần).
 Nếu PASS → chuyển sang phần tiếp theo.
+Hỗ trợ route qua 9router khi ROUTER_URL được cấu hình.
 """
 
+import logging
+import requests
 import google.generativeai as genai
-from config import AGENT_KEYS, GEMINI_MODEL_SUPERVISOR, SUPERVISOR_TEMPERATURE, TTS_RULES
+from config import (
+    AGENT_KEYS, GEMINI_MODEL_SUPERVISOR, SUPERVISOR_TEMPERATURE, TTS_RULES,
+    ROUTER_URL, ROUTER_API_KEY,
+)
+
+_log = logging.getLogger(__name__)
 
 SUPERVISOR_SYSTEM = f"""あなたは、NPBポッドキャスト台本の品質審査官です。
 台本の各セクションを個別に審査し、合格（PASS）か不合格（FAIL）を判定します。
@@ -59,6 +67,54 @@ FAIL の場合：
 """
 
 
+def _call_supervisor(system_prompt: str, user_input: str) -> str:
+    """Gọi Supervisor — qua 9router nếu ROUTER_URL được set."""
+    if ROUTER_URL:
+        url = f"{ROUTER_URL}/v1/chat/completions"
+        model = GEMINI_MODEL_SUPERVISOR
+        headers = {"Content-Type": "application/json"}
+        if ROUTER_API_KEY:
+            headers["Authorization"] = f"Bearer {ROUTER_API_KEY}"
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_input},
+            ],
+            "temperature": SUPERVISOR_TEMPERATURE,
+            "max_tokens": 4096,
+        }
+        _log.info(f"9router supervisor: POST {url} model={model}")
+        resp = requests.post(url, json=payload, headers=headers, timeout=300)
+        resp.raise_for_status()
+        data = resp.json()
+        choices = data.get("choices", [])
+        if choices:
+            return choices[0].get("message", {}).get("content", "")
+        return ""
+
+    # Direct Gemini SDK
+    api_key = AGENT_KEYS.get("quality_checker", "")
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel(
+        model_name=GEMINI_MODEL_SUPERVISOR,
+        system_instruction=system_prompt,
+        generation_config=genai.GenerationConfig(
+            temperature=SUPERVISOR_TEMPERATURE,
+            max_output_tokens=4096,
+        ),
+    )
+    response = model.generate_content(user_input)
+    try:
+        return response.text
+    except ValueError:
+        if response.candidates:
+            parts = response.candidates[0].content.parts
+            if parts:
+                return parts[0].text
+        return ""
+
+
 def review_section(section_text: str, section_name: str) -> dict:
     """1つのセクションを審査する。
 
@@ -69,26 +125,12 @@ def review_section(section_text: str, section_name: str) -> dict:
         - reason: str (FAILの理由)
         - instruction: str (改善指示)
     """
-    api_key = AGENT_KEYS.get("quality_checker", "")
-    genai.configure(api_key=api_key)
-
-    model = genai.GenerativeModel(
-        model_name=GEMINI_MODEL_SUPERVISOR,
-        system_instruction=SUPERVISOR_SYSTEM,
-        generation_config=genai.GenerationConfig(
-            temperature=SUPERVISOR_TEMPERATURE,
-            max_output_tokens=4096,
-        ),
-    )
-
     prompt = f"""以下の「{section_name}」セクションを審査してください。
 
 {section_text}"""
 
-    response = model.generate_content(prompt)
-    try:
-        result_text = response.text
-    except ValueError:
+    result_text = _call_supervisor(SUPERVISOR_SYSTEM, prompt)
+    if not result_text:
         # Response rỗng (safety filter hoặc max tokens) → auto PASS
         return {"passed": True, "text": section_text, "reason": "", "instruction": ""}
 

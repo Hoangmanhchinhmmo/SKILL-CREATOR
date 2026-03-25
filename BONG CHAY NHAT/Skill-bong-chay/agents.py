@@ -2,19 +2,59 @@
 NPB Podcast Multi-Agent System — 5 Specialized Agents
 Mỗi agent có 1 nhiệm vụ duy nhất, gọi Gemini API với prompt chuyên biệt.
 Mỗi agent dùng API key riêng để phân tải và tránh rate limit.
+Hỗ trợ route qua 9router khi ROUTER_URL được cấu hình.
 """
 
+import logging
+import requests
 import google.generativeai as genai
-from config import AGENT_KEYS, AGENT_MODELS, GEMINI_MODEL, TEMPERATURE, MAX_OUTPUT_TOKENS, TTS_RULES
+from config import (
+    AGENT_KEYS, AGENT_MODELS, GEMINI_MODEL, TEMPERATURE, MAX_OUTPUT_TOKENS,
+    TTS_RULES, ROUTER_URL, ROUTER_API_KEY,
+)
+
+_log = logging.getLogger(__name__)
+
+
+def _call_via_router(system_prompt: str, user_input: str, model_name: str) -> str:
+    """Gọi API qua 9router (OpenAI-compatible endpoint).
+    model_name lấy từ AGENT_MODELS — mỗi step có model riêng."""
+    url = f"{ROUTER_URL}/v1/chat/completions"
+    headers = {"Content-Type": "application/json"}
+    if ROUTER_API_KEY:
+        headers["Authorization"] = f"Bearer {ROUTER_API_KEY}"
+    payload = {
+        "model": model_name,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_input},
+        ],
+        "temperature": TEMPERATURE,
+        "max_tokens": MAX_OUTPUT_TOKENS,
+    }
+    _log.info(f"9router: POST {url} model={model_name}")
+    resp = requests.post(url, json=payload, headers=headers, timeout=300)
+    resp.raise_for_status()
+    data = resp.json()
+    choices = data.get("choices", [])
+    if choices:
+        return choices[0].get("message", {}).get("content", "")
+    return ""
 
 
 def _call_gemini(system_prompt: str, user_input: str, agent_name: str) -> str:
-    """Gọi Gemini API với API key + model riêng cho từng agent."""
+    """Gọi Gemini API — qua 9router nếu ROUTER_URL được set, nếu không gọi trực tiếp."""
+    model_name = AGENT_MODELS.get(agent_name, GEMINI_MODEL)
+
+    # Route qua 9router
+    if ROUTER_URL:
+        return _call_via_router(system_prompt, user_input, model_name)
+
+    # Gọi trực tiếp Gemini SDK
     api_key = AGENT_KEYS.get(agent_name, "")
     if not api_key:
         raise ValueError(f"API key chưa được cấu hình cho agent: {agent_name}")
 
-    model_name = AGENT_MODELS.get(agent_name, GEMINI_MODEL)
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel(
         model_name=model_name,
@@ -65,21 +105,57 @@ AGENT1_SYSTEM = """あなたはNPBデータリサーチャーです。
 """
 
 
-def agent_data_collector(user_input: str) -> str:
-    """Agent 1: NPBデータ収集 (NotebookLM + Gemini)
+KEYWORD_EXTRACT_PROMPT = """以下のユーザー入力から、NPB野球データを検索するためのキーワードを抽出してください。
 
-    1. NotebookLMから実データを取得
-    2. Geminiで整理・補完
+【ルール】
+- 3〜5個のキーワードを生成する
+- 各キーワードは日本語の検索クエリ形式で書く
+- チーム名、選手名、対戦情報を含める
+- 1行に1つのキーワードを書く
+- キーワードだけ出力する（説明や番号は不要）
+
+【ユーザー入力】
+{user_input}
+"""
+
+
+def _extract_search_keywords(user_input: str) -> list[str]:
+    """Use Gemini to extract search keywords from user input."""
+    try:
+        raw = _call_gemini(
+            "検索キーワード抽出の専門家です。",
+            KEYWORD_EXTRACT_PROMPT.format(user_input=user_input),
+            "data_collector",
+        )
+        keywords = [line.strip() for line in raw.strip().split("\n") if line.strip()]
+        return keywords[:5]  # Max 5 keywords
+    except Exception:
+        return [user_input]  # Fallback: use raw input as keyword
+
+
+def agent_data_collector(user_input: str) -> str:
+    """Agent 1: NPBデータ収集 (Gemini Keyword Extraction + NotebookLM Research)
+
+    1. Geminiでユーザー入力からキーワードを抽出
+    2. NotebookLM Research APIで最新データを検索
+    3. NotebookLMの結果をGeminiで整理・補完
     """
-    # Step 1: NotebookLMからデータ収集
+    import logging
+    log = logging.getLogger(__name__)
+
+    # Step 1: Geminiでキーワード抽出
+    search_keywords = _extract_search_keywords(user_input)
+    log.info(f"Agent1: extracted keywords: {search_keywords}")
+
+    # Step 2: NotebookLMでデータ収集（キーワードベース、ハードコードなし）
     nlm_data = ""
     try:
         from nlm_data import collect_npb_data
-        nlm_data = collect_npb_data(user_input)
-    except Exception:
-        pass  # NotebookLM使えない場合はGeminiのみ
+        nlm_data = collect_npb_data(user_input, search_keywords=search_keywords)
+    except Exception as e:
+        log.warning(f"Agent1: NotebookLM unavailable — {e}")
 
-    # Step 2: Geminiで整理
+    # Step 3: Geminiで整理
     if nlm_data:
         prompt = f"""以下はNotebookLMから取得した実データです。
 このデータをもとに、試合プレビューに必要な情報を整理してください。

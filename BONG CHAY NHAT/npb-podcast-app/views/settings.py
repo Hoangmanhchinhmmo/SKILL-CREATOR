@@ -1,8 +1,11 @@
 """
 Settings Tab — API keys, model selection, pipeline config, storage management.
+Hỗ trợ 9Router: fetch danh sách models từ 9router API, chọn per-step.
 """
 
 import flet as ft
+import requests
+import threading
 from theme import (
     show_snackbar, show_dialog, close_dialog,
     BG_CARD, BG_ELEVATED, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, SUCCESS, DANGER,
@@ -19,6 +22,8 @@ GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"]
 KEY_WRITER = "gemini_key_writer"
 KEY_EDITOR = "gemini_key_editor"
 KEY_ARCHITECT = "gemini_key_architect"
+ROUTER_URL_KEY = "router_url"
+ROUTER_API_KEY_KEY = "router_api_key"
 MODEL_DATA = "model_data"
 MODEL_ANALYSIS = "model_analysis"
 MODEL_WRITER = "model_writer"
@@ -31,6 +36,29 @@ LICENSE_URL = "license_server_url"
 UPDATE_URL = "update_server_url"
 
 
+def _normalize_router_url(url: str) -> str:
+    """Strip trailing / và /v1 để tránh URL bị lặp /v1/v1/..."""
+    url = url.rstrip("/")
+    if url.endswith("/v1"):
+        url = url[:-3]
+    return url
+
+
+def _fetch_router_models(url: str, api_key: str) -> list[str]:
+    """Fetch danh sách models từ 9router /v1/models endpoint."""
+    try:
+        url = _normalize_router_url(url)
+        headers = {}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        resp = requests.get(f"{url}/v1/models", headers=headers, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        return [m["id"] for m in data.get("data", [])]
+    except Exception:
+        return []
+
+
 class SettingsTab(ft.Column):
     """Settings configuration view."""
 
@@ -38,22 +66,54 @@ class SettingsTab(ft.Column):
         super().__init__(expand=True, spacing=16, scroll=ft.ScrollMode.AUTO)
         self._page = page
         self.machine_code = get_machine_code()
+        self._router_models = []  # Cache fetched models
         self._build()
 
     def _build(self):
         # Load current settings
         self._load_values()
 
+        # Determine if 9router is configured
+        router_url = self.vals.get(ROUTER_URL_KEY, "") or "http://localhost:20128"
+        self._is_router_mode = bool(router_url)
+
         # API Keys section
         self.key_writer_input = input_field(label="Gemini Key (Writer)", password=True, value=self.vals.get(KEY_WRITER, ""), expand=True)
         self.key_editor_input = input_field(label="Gemini Key (Editor)", password=True, value=self.vals.get(KEY_EDITOR, ""), expand=True)
         self.key_architect_input = input_field(label="Gemini Key (Architect)", password=True, value=self.vals.get(KEY_ARCHITECT, ""), expand=True)
 
-        # Model dropdowns
-        self.model_data_dd = self._model_dropdown("Data Collector", self.vals.get(MODEL_DATA, "gemini-2.5-pro"))
-        self.model_analysis_dd = self._model_dropdown("Tactical Analyst", self.vals.get(MODEL_ANALYSIS, "gemini-2.5-pro"))
-        self.model_writer_dd = self._model_dropdown("Section Writer", self.vals.get(MODEL_WRITER, "gemini-2.5-pro"))
-        self.model_supervisor_dd = self._model_dropdown("Supervisor", self.vals.get(MODEL_SUPERVISOR, "gemini-2.5-pro"))
+        # 9Router settings
+        self.router_url_input = input_field(
+            label="9Router URL (để trống = gọi trực tiếp Gemini)",
+            value=router_url,
+            expand=True,
+        )
+        self.router_api_key_input = input_field(
+            label="9Router API Key",
+            password=True,
+            value=self.vals.get(ROUTER_API_KEY_KEY, ""),
+            expand=True,
+        )
+        self.router_model_status = ft.Text("", size=11, color=TEXT_MUTED)
+        self.router_fetch_btn = outlined_button(
+            "Fetch Models", icon=ft.Icons.REFRESH_ROUNDED, on_click=self._on_fetch_models,
+        )
+
+        # Model dropdowns — sẽ được populate bởi _update_model_dropdowns
+        available_models = GEMINI_MODELS
+        if router_url:
+            # Try fetching models synchronously on build
+            fetched = _fetch_router_models(router_url, self.vals.get(ROUTER_API_KEY_KEY, ""))
+            if fetched:
+                self._router_models = fetched
+                available_models = fetched
+                self.router_model_status.value = f"{len(fetched)} models"
+                self.router_model_status.color = SUCCESS
+
+        self.model_data_dd = self._model_dropdown("Data Collector", self.vals.get(MODEL_DATA, ""), available_models)
+        self.model_analysis_dd = self._model_dropdown("Tactical Analyst", self.vals.get(MODEL_ANALYSIS, ""), available_models)
+        self.model_writer_dd = self._model_dropdown("Section Writer", self.vals.get(MODEL_WRITER, ""), available_models)
+        self.model_supervisor_dd = self._model_dropdown("Supervisor", self.vals.get(MODEL_SUPERVISOR, ""), available_models)
 
         # Pipeline sliders
         temp_val = float(self.vals.get(TEMPERATURE, "0.8"))
@@ -78,7 +138,6 @@ class SettingsTab(ft.Column):
         self.tokens_input = input_field(label="Max Output Tokens", value=self.vals.get(MAX_TOKENS, "16384"))
         self.retries_input = input_field(label="Max Retries", value=self.vals.get(MAX_RETRIES, "2"))
 
-
         # Storage info
         db_size_mb = get_db_size() / (1024 * 1024)
         article_count = get_article_count()
@@ -87,28 +146,51 @@ class SettingsTab(ft.Column):
         # Save message
         self.save_msg = ft.Text("", size=12)
 
+        # Model source label
+        model_source = "9Router" if self._is_router_mode and self._router_models else "Gemini"
+        model_hint = (
+            "Models từ 9Router. Bấm 'Fetch Models' nếu chưa thấy."
+            if self._is_router_mode
+            else "Models Gemini trực tiếp. Cấu hình 9Router URL để dùng model khác."
+        )
+
         self.controls = [
             ft.Text("Cấu hình", size=24, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
 
-            # API Keys
-            self._section_header("API Keys"),
+            # 9Router
+            self._section_header("9Router (API Proxy)"),
             ft.Container(
                 content=ft.Column([
-                    self._key_row(self.key_writer_input),
-                    self._key_row(self.key_editor_input),
-                    self._key_row(self.key_architect_input),
-                ], spacing=12),
+                    ft.Text("Route qua 9router thay vì gọi trực tiếp Gemini API. Để trống = gọi trực tiếp.",
+                            size=12, color=TEXT_MUTED),
+                    self._key_row(self.router_url_input),
+                    self._key_row(self.router_api_key_input),
+                    ft.Row([self.router_fetch_btn, self.router_model_status], spacing=8),
+                ], spacing=8),
                 **card_style(),
             ),
 
-            # Model
-            self._section_header("Model"),
+            # Model Selection (unified — per step)
+            self._section_header(f"Model ({model_source})"),
             ft.Container(
                 content=ft.Column([
+                    ft.Text(model_hint, size=12, color=TEXT_MUTED),
                     self.model_data_dd,
                     self.model_analysis_dd,
                     self.model_writer_dd,
                     self.model_supervisor_dd,
+                ], spacing=12),
+                **card_style(),
+            ),
+
+            # API Keys (dùng khi không có 9Router)
+            self._section_header("API Keys (Gemini trực tiếp)"),
+            ft.Container(
+                content=ft.Column([
+                    ft.Text("Chỉ cần khi không dùng 9Router.", size=12, color=TEXT_MUTED),
+                    self._key_row(self.key_writer_input),
+                    self._key_row(self.key_editor_input),
+                    self._key_row(self.key_architect_input),
                 ], spacing=12),
                 **card_style(),
             ),
@@ -167,11 +249,18 @@ class SettingsTab(ft.Column):
     def _key_row(self, text_field: ft.TextField) -> ft.Row:
         return ft.Row([text_field], spacing=8)
 
-    def _model_dropdown(self, label: str, current: str) -> ft.Dropdown:
+    def _model_dropdown(self, label: str, current: str, models: list[str]) -> ft.Dropdown:
+        """Create model dropdown with given model list."""
+        if current and current in models:
+            value = current
+        elif models:
+            value = models[0]
+        else:
+            value = None
         return ft.Dropdown(
             label=label,
-            value=current if current in GEMINI_MODELS else GEMINI_MODELS[0],
-            options=[ft.dropdown.Option(m) for m in GEMINI_MODELS],
+            value=value,
+            options=[ft.dropdown.Option(m) for m in models],
             bgcolor=BG_ELEVATED,
             color=TEXT_PRIMARY,
             label_style=ft.TextStyle(color=TEXT_SECONDARY),
@@ -180,29 +269,80 @@ class SettingsTab(ft.Column):
             border_radius=6,
         )
 
+    def _update_model_dropdowns(self, models: list[str]):
+        """Cập nhật tất cả 4 dropdown model với danh sách models mới."""
+        options = [ft.dropdown.Option(m) for m in models]
+        for dd in [self.model_data_dd, self.model_analysis_dd, self.model_writer_dd, self.model_supervisor_dd]:
+            current = dd.value
+            dd.options = list(options)  # Copy list
+            if current and current in models:
+                dd.value = current
+            elif models:
+                dd.value = models[0]
+            else:
+                dd.value = None
+
     def _on_slider(self, e, label: ft.Text):
         label.value = f"{e.control.value:.1f}"
         self._page.update()
+
+    def _on_fetch_models(self, e):
+        """Fetch models từ 9router khi user bấm Fetch."""
+        url = self.router_url_input.value.strip()
+        api_key = self.router_api_key_input.value.strip()
+        if not url:
+            self.router_model_status.value = "Nhập 9Router URL trước"
+            self.router_model_status.color = DANGER
+            self._page.update()
+            return
+
+        self.router_model_status.value = "Đang fetch..."
+        self.router_model_status.color = TEXT_MUTED
+        self._page.update()
+
+        def _fetch():
+            models = _fetch_router_models(url, api_key)
+            self._router_models = models
+            if models:
+                self._update_model_dropdowns(models)
+                self.router_model_status.value = f"{len(models)} models"
+                self.router_model_status.color = SUCCESS
+            else:
+                # Fallback về Gemini models
+                self._update_model_dropdowns(GEMINI_MODELS)
+                self.router_model_status.value = "Không fetch được. Kiểm tra URL/Key. Đang dùng Gemini models."
+                self.router_model_status.color = DANGER
+            self._page.update()
+
+        threading.Thread(target=_fetch, daemon=True).start()
 
     def _on_save(self, e):
         """Save all settings to SQLite."""
         mc = self.machine_code
 
         # Encrypt and save API keys
-        for key, input_field in [
+        for key, input_ctrl in [
             (KEY_WRITER, self.key_writer_input),
             (KEY_EDITOR, self.key_editor_input),
             (KEY_ARCHITECT, self.key_architect_input),
         ]:
-            val = input_field.value.strip()
+            val = input_ctrl.value.strip()
             if val:
                 set_setting(key, encrypt(val, mc), encrypted=True)
 
-        # Save models
-        set_setting(MODEL_DATA, self.model_data_dd.value)
-        set_setting(MODEL_ANALYSIS, self.model_analysis_dd.value)
-        set_setting(MODEL_WRITER, self.model_writer_dd.value)
-        set_setting(MODEL_SUPERVISOR, self.model_supervisor_dd.value)
+        # Save 9Router settings (normalize URL)
+        router_url = _normalize_router_url(self.router_url_input.value.strip())
+        set_setting(ROUTER_URL_KEY, router_url)
+
+        router_api_key = self.router_api_key_input.value.strip()
+        if router_api_key:
+            set_setting(ROUTER_API_KEY_KEY, encrypt(router_api_key, mc), encrypted=True)
+
+        # Save per-step models (works for both Gemini and 9router models)
+        set_setting(MODEL_DATA, self.model_data_dd.value or "")
+        set_setting(MODEL_ANALYSIS, self.model_analysis_dd.value or "")
+        set_setting(MODEL_WRITER, self.model_writer_dd.value or "")
+        set_setting(MODEL_SUPERVISOR, self.model_supervisor_dd.value or "")
 
         # Save pipeline config
         set_setting(TEMPERATURE, f"{self.temp_slider.value:.1f}")

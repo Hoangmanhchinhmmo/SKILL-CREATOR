@@ -5,6 +5,7 @@ Emits progress events via callback for real-time UI updates.
 
 import sys
 import os
+import re
 import threading
 import datetime
 import time
@@ -58,6 +59,22 @@ def _inject_settings_to_env():
             if decrypted:
                 os.environ[env_key] = decrypted
 
+    # 9Router settings
+    router_url = get_setting("router_url")
+    if router_url:
+        os.environ["ROUTER_URL"] = router_url
+    elif "ROUTER_URL" in os.environ:
+        del os.environ["ROUTER_URL"]
+
+    router_api_key = get_setting("router_api_key")
+    if router_api_key:
+        mc = get_machine_code()
+        decrypted_key = decrypt(router_api_key, mc)
+        if decrypted_key:
+            os.environ["ROUTER_API_KEY"] = decrypted_key
+    elif "ROUTER_API_KEY" in os.environ:
+        del os.environ["ROUTER_API_KEY"]
+
     setting_map = {
         "model_data": "GEMINI_MODEL_DATA",
         "model_analysis": "GEMINI_MODEL_ANALYSIS",
@@ -72,6 +89,25 @@ def _inject_settings_to_env():
         val = get_setting(db_key)
         if val:
             os.environ[env_key] = val
+
+
+def _post_process(text: str) -> str:
+    """メタ応答と連続（間）を除去する。"""
+    meta_patterns = [
+        r"^はい、承知いたしました。?\n?",
+        r"^了解しました。?\n?",
+        r"^承知しました。?\n?",
+        r"^以下の通りです。?\n?",
+        r"^ご指定の内容を.*?\n",
+        r"^ご質問にお答えします。?\n?",
+        r"^NPBの.*?専門家として.*?\n",
+    ]
+    for pattern in meta_patterns:
+        text = re.sub(pattern, "", text, flags=re.MULTILINE)
+    text = re.sub(r"(（間）\s*\n?\s*){2,}", "（間）\n", text)
+    text = re.sub(r"\n{4,}", "\n\n\n", text)
+    text = text.lstrip("\n")
+    return text
 
 
 # Agent definitions for v2 pipeline
@@ -245,9 +281,8 @@ class PipelineRunner:
 
         full_script = "\n\n（間）\n\n".join(sections)
 
-        # Post-process
-        from pipeline_v2 import post_process
-        full_script = post_process(full_script)
+        # Post-process (inline — không phụ thuộc pipeline_v2.py)
+        full_script = _post_process(full_script)
 
         update_agent_log(log_ids["postprocess"], status="passed", finished_at=datetime.datetime.now().isoformat())
         self.on_progress("Post-processing", "passed", 1, "Done")

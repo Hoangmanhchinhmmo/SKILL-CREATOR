@@ -8,6 +8,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# === 9Router (route qua local 9router thay vì gọi trực tiếp Gemini) ===
+_raw_router_url = os.getenv("ROUTER_URL", "http://localhost:20128").rstrip("/")
+# Strip trailing /v1 nếu user nhập URL kèm /v1
+if _raw_router_url.endswith("/v1"):
+    _raw_router_url = _raw_router_url[:-3]
+ROUTER_URL = _raw_router_url  # e.g. http://localhost:20128
+ROUTER_API_KEY = os.getenv("ROUTER_API_KEY", "")  # API key cho 9router
+
 # === Gemini API Keys (3 keys xoay vòng giữa các agent) ===
 GEMINI_API_KEY_WRITER = os.getenv("GEMINI_API_KEY_WRITER", "")
 GEMINI_API_KEY_EDITOR = os.getenv("GEMINI_API_KEY_EDITOR", "")

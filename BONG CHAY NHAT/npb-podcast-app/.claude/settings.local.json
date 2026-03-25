@@ -25,7 +25,10 @@
       "Bash(python:*)",
       "Bash(PYTHONIOENCODING=utf-8 python build.py clean)",
       "Bash(pip install:*)",
-      "Bash(PYTHONIOENCODING=utf-8 python build.py quick)"
+      "Bash(PYTHONIOENCODING=utf-8 python build.py quick)",
+      "Read(//d/CODE_2026/SKILL-CREATOR/BONG CHAY NHAT/**)",
+      "Bash(find . -type d -name *Skill* -o -type d -name *bong*)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

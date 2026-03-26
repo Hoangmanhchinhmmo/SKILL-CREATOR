@@ -11,64 +11,47 @@ import logging
 import requests
 import google.generativeai as genai
 from config import (
-    AGENT_KEYS, GEMINI_MODEL_SUPERVISOR, SUPERVISOR_TEMPERATURE, TTS_RULES,
-    ROUTER_URL, ROUTER_API_KEY,
+    AGENT_KEYS, GEMINI_MODEL_SUPERVISOR, SUPERVISOR_TEMPERATURE, MAX_OUTPUT_TOKENS,
+    TTS_RULES, ROUTER_URL, ROUTER_API_KEY,
 )
 
 _log = logging.getLogger(__name__)
 
-SUPERVISOR_SYSTEM = f"""あなたは、NPBポッドキャスト台本の品質審査官です。
-台本の各セクションを個別に審査し、合格（PASS）か不合格（FAIL）を判定します。
+SUPERVISOR_SYSTEM = f"""あなたはNPBポッドキャスト台本の品質審査官です。
+台本の各セクションを審査し、PASSかFAILを判定します。
 
-【審査基準 — すべて満たす必要あり】
+【審査基準】
+1. 選手名が具体的に挙がっているか
+2. 分析に根拠があるか
+3. 800文字以上か
+4. 英語やマークダウンが含まれていないか
+5. 日本人名がひらがな、外国人名がカタカナか
+6. 話し言葉で書かれているか
+7. メタ応答（「承知しました」等）が混入していないか
 
-1. 深さ：選手名が具体的に挙がっているか（「投手」ではなく名前で）
-2. 根拠：分析に理由があるか（「強い」だけでなく「なぜ強いか」）
-3. 長さ：セクションが十分な長さか（最低800文字以上）
-4. TTS：英語が含まれていないか、マークダウンがないか
-5. 名前：日本人名がひらがな、外国人名がカタカナか
-6. 数字：アラビア数字で書かれているか
-7. 文体：話し言葉で自然に読めるか（書き言葉や箇条書きは禁止）
-8. （間）：段落の切れ目に入っているか
-9. 面白さ：対比、繰り返し、問いかけなど、聞いていて退屈しない工夫があるか
+【出力フォーマット — 簡潔に】
 
-【致命的エラー — 見つけたら必ずFAILまたは削除修正】
-
-10. メタ応答の混入禁止：
-    「はい、承知いたしました」「了解しました」「以下の通りです」
-    「ご指定の内容を」「ご質問にお答えします」
-    → このようなAIの応答文が台本に混入していたら、必ず削除する
-    → これは視聴者に聞かせる台本であり、AIへの指示応答ではない
-
-11. （間）の連続禁止：
-    （間）が2つ以上連続していたら、1つだけ残して削除する
-
-12. 冒頭チェック：
-    セクションの最初の文が、AIへの応答文（「はい」「承知」「了解」）で
-    始まっていたら、その文を削除し、本文から始めるよう修正する
-
-【出力フォーマット — 必ずこの形式で返答】
-
-判定：PASS または FAIL
-
-PASS の場合：
+問題なければ：
 判定：PASS
-修正済み：
-（修正済みのテキストをそのまま出力。軽微な修正があればここで直す）
 
-FAIL の場合：
+軽微な修正が必要な場合：
+判定：PASS
+修正点：（修正箇所だけ簡潔に列挙。元テキスト全体は出力しない）
+
+不合格の場合：
 判定：FAIL
-理由：（不合格の理由を2〜3行で）
-改善指示：（具体的に何を書き足すべきか）
+理由：（2〜3行）
+改善指示：（何を足すか具体的に）
 
 【重要】
-- PASSでも、軽微な修正（TTS表記、読点追加など）は自動で直して「修正済み」に出力する
-- FAILの場合は、改善指示を具体的に書く（「もっと詳しく」は禁止。何を足すか明記する）
+- PASSの場合、元テキスト全体を出力しないこと（トークン節約）
+- 修正箇所だけ「○○→△△」形式で書く
 """
 
 
 def _call_supervisor(system_prompt: str, user_input: str) -> str:
-    """Gọi Supervisor — qua 9router nếu ROUTER_URL được set."""
+    """Gọi Supervisor — qua 9router nếu ROUTER_URL được set.
+    Supervisor chỉ cần review + output lại section, nên max_tokens=8192 là đủ."""
     if ROUTER_URL:
         url = f"{ROUTER_URL}/v1/chat/completions"
         model = GEMINI_MODEL_SUPERVISOR
@@ -82,15 +65,21 @@ def _call_supervisor(system_prompt: str, user_input: str) -> str:
                 {"role": "user", "content": user_input},
             ],
             "temperature": SUPERVISOR_TEMPERATURE,
-            "max_tokens": 4096,
+            "max_tokens": min(MAX_OUTPUT_TOKENS, 8192),
+            "stream": False,
         }
         _log.info(f"9router supervisor: POST {url} model={model}")
-        resp = requests.post(url, json=payload, headers=headers, timeout=300)
-        resp.raise_for_status()
-        data = resp.json()
-        choices = data.get("choices", [])
-        if choices:
-            return choices[0].get("message", {}).get("content", "")
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=120)
+            resp.raise_for_status()
+            data = resp.json()
+            choices = data.get("choices", [])
+            if choices:
+                return choices[0].get("message", {}).get("content", "")
+        except requests.exceptions.Timeout:
+            _log.warning(f"9router supervisor: TIMEOUT after 120s")
+        except Exception as e:
+            _log.warning(f"9router supervisor: error — {e}")
         return ""
 
     # Direct Gemini SDK
@@ -101,7 +90,7 @@ def _call_supervisor(system_prompt: str, user_input: str) -> str:
         system_instruction=system_prompt,
         generation_config=genai.GenerationConfig(
             temperature=SUPERVISOR_TEMPERATURE,
-            max_output_tokens=4096,
+            max_output_tokens=MAX_OUTPUT_TOKENS,
         ),
     )
     response = model.generate_content(user_input)
@@ -131,38 +120,28 @@ def review_section(section_text: str, section_name: str) -> dict:
 
     result_text = _call_supervisor(SUPERVISOR_SYSTEM, prompt)
     if not result_text:
-        # Response rỗng (safety filter hoặc max tokens) → auto PASS
+        # Response rỗng (timeout/safety filter) → auto PASS với元テキスト
         return {"passed": True, "text": section_text, "reason": "", "instruction": ""}
 
     # Parse response
-    passed = "判定：PASS" in result_text or "判定: PASS" in result_text
+    passed = "PASS" in result_text.upper().split("\n")[0] if result_text.strip() else False
 
     if passed:
-        # Extract 修正済み text
-        if "修正済み：" in result_text:
-            revised = result_text.split("修正済み：", 1)[1].strip()
-        elif "修正済み:" in result_text:
-            revised = result_text.split("修正済み:", 1)[1].strip()
-        else:
-            revised = section_text
-        return {"passed": True, "text": revised, "reason": "", "instruction": ""}
+        # PASS — luôn dùng元テキスト (supervisor không output lại full text nữa)
+        return {"passed": True, "text": section_text, "reason": "", "instruction": ""}
     else:
         reason = ""
         instruction = ""
-        if "理由：" in result_text:
-            parts = result_text.split("理由：", 1)[1]
-            if "改善指示：" in parts:
-                reason, instruction = parts.split("改善指示：", 1)
-            elif "改善指示:" in parts:
-                reason, instruction = parts.split("改善指示:", 1)
-            else:
-                reason = parts
-        elif "理由:" in result_text:
-            parts = result_text.split("理由:", 1)[1]
-            if "改善指示:" in parts:
-                reason, instruction = parts.split("改善指示:", 1)
-            else:
-                reason = parts
+        for sep_r in ("理由：", "理由:"):
+            if sep_r in result_text:
+                parts = result_text.split(sep_r, 1)[1]
+                for sep_i in ("改善指示：", "改善指示:"):
+                    if sep_i in parts:
+                        reason, instruction = parts.split(sep_i, 1)
+                        break
+                else:
+                    reason = parts
+                break
 
         return {
             "passed": False,

@@ -12,7 +12,7 @@ from theme import (
     ACCENT, SUCCESS, WARNING, DANGER, INFO,
     card_style, accent_button, danger_button, status_badge,
 )
-from services.pipeline_runner import PipelineRunner, V2_AGENTS, V1_AGENTS
+from services.pipeline_runner import PipelineRunner, V2_AGENTS, V1_AGENTS, V3_AGENTS
 
 STATUS_ICONS = {
     "waiting": ("⏳", TEXT_MUTED),
@@ -36,7 +36,13 @@ class PipelineTab(ft.Column):
         self._timer_thread: threading.Thread | None = None
 
         # UI elements
+        self._topic = ""
         self.title_text = ft.Text("Pipeline", size=24, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY)
+        self.copy_title_btn = ft.IconButton(
+            icon=ft.Icons.COPY_ROUNDED, icon_size=18, tooltip="Copy title",
+            on_click=self._on_copy_title, icon_color=TEXT_MUTED,
+        )
+        self.copy_title_btn.visible = False
         self.status_text = ft.Text("Chờ lệnh...", size=14, color=TEXT_MUTED)
         self.timer_text = ft.Text("00:00", size=14, color=TEXT_MUTED)
 
@@ -62,7 +68,7 @@ class PipelineTab(ft.Column):
         self.open_editor_btn.visible = False
 
         self.controls = [
-            ft.Row([self.title_text, ft.Container(expand=True), self.status_text, self.timer_text], spacing=12),
+            ft.Row([self.title_text, self.copy_title_btn, ft.Container(expand=True), self.status_text, self.timer_text], spacing=12),
             self.agent_cards_column,
             self.log_container,
             ft.Row([self.cancel_btn, ft.Container(expand=True), self.open_editor_btn], spacing=12),
@@ -87,7 +93,9 @@ class PipelineTab(ft.Column):
 
     def start(self, topic: str, format_type: str, pipeline_version: str, app_state: dict):
         """Start a pipeline run."""
+        self._topic = topic
         self.title_text.value = f"Pipeline — {topic[:50]}"
+        self.copy_title_btn.visible = True
         self.status_text.value = "Đang chạy"
         self.status_text.color = INFO
         self.cancel_btn.visible = True
@@ -100,7 +108,12 @@ class PipelineTab(ft.Column):
         self._agent_start_times.clear()
 
         # Build agent cards
-        agents = V2_AGENTS if pipeline_version == "v2" else V1_AGENTS
+        if pipeline_version == "v3":
+            agents = V3_AGENTS
+        elif pipeline_version == "v2":
+            agents = V2_AGENTS
+        else:
+            agents = V1_AGENTS
         for agent in agents:
             self._build_agent_card(agent["name"])
 
@@ -255,6 +268,12 @@ class PipelineTab(ft.Column):
             ft.Text(f"  {timestamp}  [{agent}] {message}", size=11, color=color),
         )
         self._safe_update()
+
+    def _on_copy_title(self, e):
+        """Copy topic title to clipboard."""
+        if self._topic:
+            self._page.run_task(ft.Clipboard().set, self._topic)
+            show_snackbar(self._page, "Đã copy title", 1500)
 
     def _on_cancel(self, e):
         """Cancel button clicked."""

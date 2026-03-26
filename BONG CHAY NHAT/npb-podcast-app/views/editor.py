@@ -214,7 +214,7 @@ class EditorTab(ft.Column):
 
     def _on_copy(self, e):
         content = self.editor_field.value
-        self._page.set_clipboard(content)
+        self._page.run_task(ft.Clipboard().set, content)
         show_snackbar(self._page, "Đã copy nội dung", 2000)
 
     def _on_export(self, e):

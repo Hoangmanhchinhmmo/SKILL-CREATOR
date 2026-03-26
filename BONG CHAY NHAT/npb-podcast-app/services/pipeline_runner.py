@@ -131,6 +131,12 @@ V1_AGENTS = [
     {"name": "Quality Checker", "key": "quality_checker"},
 ]
 
+V3_AGENTS = [
+    {"name": "Research", "key": "v3_research"},
+    {"name": "Outline", "key": "v3_outline"},
+    {"name": "Writing", "key": "v3_writing"},
+]
+
 
 class PipelineRunner:
     """Runs the NPB pipeline in a background thread with progress callbacks."""
@@ -181,7 +187,12 @@ class PipelineRunner:
         # Create pipeline run record
         self.run_id = create_pipeline_run()
 
-        agents = V2_AGENTS if pipeline_version == "v2" else V1_AGENTS
+        if pipeline_version == "v3":
+            agents = V3_AGENTS
+        elif pipeline_version == "v2":
+            agents = V2_AGENTS
+        else:
+            agents = V1_AGENTS
 
         # Create agent log entries
         agent_log_ids = {}
@@ -191,7 +202,9 @@ class PipelineRunner:
             self.on_progress(agent["name"], "waiting", 0, "")
 
         try:
-            if pipeline_version == "v2":
+            if pipeline_version == "v3":
+                result = self._run_v3(topic, format_type, agents, agent_log_ids)
+            elif pipeline_version == "v2":
                 result = self._run_v2(topic, format_type, agents, agent_log_ids)
             else:
                 result = self._run_v1(topic, agents, agent_log_ids)
@@ -336,6 +349,268 @@ class PipelineRunner:
             return ""
 
         return self._last_result
+
+    def _run_v3(self, topic: str, format_type: str, agents: list, log_ids: dict) -> str:
+        """Execute v3 pipeline — multi-agent script generation.
+        format_type is JSON string with v3 params: style, hook, language, duration, channel.
+
+        Flow: Research → Outline → Writing (chunked) → Editing → Post-processing
+        Does NOT touch v1/v2 code paths."""
+        import importlib
+        import json
+
+        if "config" in sys.modules:
+            importlib.reload(sys.modules["config"])
+        if "agents" in sys.modules:
+            importlib.reload(sys.modules["agents"])
+        if "writing_styles" in sys.modules:
+            importlib.reload(sys.modules["writing_styles"])
+
+        from agents import _call_gemini
+        from writing_styles import (
+            build_script_prompt, SYSTEM_INSTRUCTION, SCRIPT_STYLES,
+            STORYTELLING_VI, STORYTELLING_EN,
+        )
+
+        # Parse v3 params
+        try:
+            params = json.loads(format_type)
+        except (json.JSONDecodeError, TypeError):
+            params = {}
+
+        style = params.get("style", "baseball_jp")
+        hook = params.get("hook", "dramatic")
+        language = params.get("language", "ja")
+        duration = params.get("duration", 23)
+        channel = params.get("channel", "")
+        style_name = SCRIPT_STYLES.get(style, "Kể chuyện")
+        is_vi = language == "vi"
+
+        self._log("V3", f"Style={style_name}, Lang={language}, Hook={hook}, Duration={duration}min")
+
+        # ── Agent 1: Research ──
+        self._run_agent("Research", log_ids["v3_research"], lambda: self._v3_research(topic, _call_gemini))
+        if self._cancelled:
+            return ""
+        research_data = self._last_result
+
+        # ── Agent 2: Outline ──
+        self._run_agent("Outline", log_ids["v3_outline"], lambda: self._v3_outline(
+            topic, research_data, style_name, language, duration, hook, is_vi, _call_gemini,
+        ))
+        if self._cancelled:
+            return ""
+        outline = self._last_result
+
+        # ── Agent 3: Writing (chunked by outline sections) ──
+        self._run_agent("Writing", log_ids["v3_writing"], lambda: self._v3_write(
+            topic, outline, research_data, style, language, duration, channel, is_vi, _call_gemini,
+        ))
+        if self._cancelled:
+            return ""
+        return self._last_result
+
+    # ── V3 Agent implementations ──
+
+    def _v3_research(self, topic: str, call_fn) -> str:
+        """Agent 1: Research — thu thập dữ liệu về topic qua AI."""
+        prompt = f"""以下のトピックについて、記事を書くために必要な背景情報、データ、重要ポイントを調査してまとめてください。
+
+トピック: {topic}
+
+【出力ルール】
+- 箇条書きで簡潔にまとめる
+- 具体的な数字、名前、日付を含める
+- 情報が不明な場合は「不明」と書く
+- 500〜1000文字程度"""
+
+        result = call_fn(
+            "あなたはリサーチャーです。トピックについて正確な情報を収集します。",
+            prompt, "data_collector",
+        )
+        return result if result else f"トピック: {topic}"
+
+    def _v3_outline(self, topic: str, research: str, style_name: str,
+                     language: str, duration: int, hook: str, is_vi: bool, call_fn) -> str:
+        """Agent 2: Outline — tạo dàn ý chi tiết."""
+        from writing_styles import SYSTEM_INSTRUCTION
+        if is_vi:
+            prompt = f"""Tạo dàn ý chi tiết cho bài viết {duration} phút về: "{topic}"
+
+Phong cách: {style_name}
+Hook mở đầu: {hook}
+
+【Dữ liệu tham khảo】
+{research[:2000]}
+
+【Yêu cầu dàn ý】
+- Chia thành 4-6 phần chính
+- Mỗi phần ghi rõ: tiêu đề, nội dung chính (3-5 gạch đầu dòng), thời lượng ước tính
+- Phần 1 phải là Hook + giới thiệu
+- Phần cuối phải là kết luận + CTA
+- Tổng thời lượng = {duration} phút
+- Chỉ trả về dàn ý, không viết bài"""
+        else:
+            prompt = f"""Create a detailed outline for a {duration}-minute script about: "{topic}"
+
+Style: {style_name}
+Opening hook: {hook}
+Language: {language}
+
+【Reference data】
+{research[:2000]}
+
+【Outline requirements】
+- Split into 4-6 main sections
+- Each section: title, key points (3-5 bullets), estimated duration
+- Section 1 must be Hook + introduction
+- Final section must be conclusion + CTA
+- Total duration = {duration} minutes
+- Return ONLY the outline, do not write the script"""
+
+        return call_fn(SYSTEM_INSTRUCTION, prompt, "tactical_analyst")
+
+    def _v3_write(self, topic: str, outline: str, research: str,
+                   style: str, language: str, duration: int, channel: str,
+                   is_vi: bool, call_fn) -> str:
+        """Agent 3: Writing — viết script theo dàn ý.
+        Chia chunks nếu duration > 10 phút (giống logic index.html gốc).
+        Mỗi chunk nhận: partSummary từ outline + 300 ký tự cuối chunk trước."""
+        from writing_styles import SYSTEM_INSTRUCTION
+        import re
+
+        CHUNK_MINUTES = 10
+
+        if duration <= CHUNK_MINUTES:
+            # Short script — single call, dùng full outline
+            return self._v3_write_single(
+                topic, outline, research, style, language, duration, channel, is_vi, call_fn,
+            )
+
+        # --- Long script: theo đúng logic index.html ---
+        num_chunks = -(-duration // CHUNK_MINUTES)
+
+        # Parse outline thành list partSummary
+        outline_parts = [
+            line.strip() for line in outline.split("\n")
+            if re.match(r"^\d+[\.\)]\s*", line.strip())
+        ]
+        self._log("Writing", f"{duration}min -> {num_chunks} chunks, {len(outline_parts)} outline parts")
+
+        script_parts = []
+        for i in range(num_chunks):
+            is_first = (i == 0)
+            is_last = (i == num_chunks - 1)
+            chunk_dur = CHUNK_MINUTES if not is_last else max(1, duration - CHUNK_MINUTES * (num_chunks - 1))
+
+            # partSummary từ outline
+            part_summary = outline_parts[i] if i < len(outline_parts) else (
+                "Tiếp tục câu chuyện một cách logic từ phần trước." if is_vi
+                else "Logically continue the story from the previous part."
+            )
+
+            # Context từ chunk trước (300 ký tự cuối)
+            prev_context = ""
+            if i > 0 and script_parts[i - 1]:
+                tail = script_parts[i - 1][-300:]
+                prev_context = (
+                    f'Bối cảnh: Phần trước của kịch bản đã kết thúc như sau: "...{tail}".'
+                    if is_vi
+                    else f'Context: The previous part of the script ended like this: "...{tail}".'
+                )
+
+            # Storytelling techniques cho chunk
+            if is_vi:
+                chunk_techniques = (
+                    "\nHÃY NHỚ CÁC NGUYÊN TẮC KỂ CHUYỆN: Vì đây là phần cuối, hãy giải quyết xung đột chính, đóng lại Vòng Lặp Mở, và đưa ra một kết luận đanh thép."
+                    if is_last else
+                    "\nHÃY NHỚ CÁC NGUYÊN TẮC KỂ CHUYỆN: Duy trì sự tò mò, phát triển xung đột, đi sâu vào cảm xúc, và có thể lồng ghép các chi tiết dữ liệu hoặc trích dẫn để tăng sức nặng."
+                )
+            else:
+                chunk_techniques = (
+                    "\nREMEMBER STORYTELLING PRINCIPLES: As this is the final part, you MUST resolve the main conflict, close the Open Loop, and deliver a powerful conclusion."
+                    if is_last else
+                    "\nREMEMBER STORYTELLING PRINCIPLES: Maintain suspense, escalate the conflict, delve into emotions, and consider weaving in data or quotes to add weight."
+                )
+
+            # CTA cho chunk đầu và cuối
+            chunk_cta = ""
+            if channel:
+                if is_vi:
+                    if is_first:
+                        chunk_cta = f'\nYÊU CẦU MỞ ĐẦU: Hãy viết một đoạn mở đầu thật hấp dẫn. Ngay sau đó, viết lời chào mừng sáng tạo đến kênh "{channel}" liên quan đến chủ đề.'
+                    if is_last:
+                        chunk_cta += f'\nYÊU CẦU KẾT THÚC: Ở cuối, viết CTA kêu gọi thích, chia sẻ, đăng ký kênh "{channel}", và đặt câu hỏi mở.'
+                else:
+                    if is_first:
+                        chunk_cta = f'\nOPENING: Write an engaging opening. Then welcome viewers to "{channel}" channel.'
+                    if is_last:
+                        chunk_cta += f'\nCONCLUDING: End with CTA for likes, shares, subscribes to "{channel}", and an open question.'
+
+            # Build chunk prompt (giống index.html)
+            self._log("Writing", f"Chunk {i+1}/{num_chunks} ({chunk_dur}min)")
+            self.on_progress("Writing", "running", 1, f"Chunk {i+1}/{num_chunks}")
+
+            if is_vi:
+                chunk_prompt = (
+                    f'Bây giờ, hãy viết chi tiết phần kịch bản cho một phần của câu chuyện lớn hơn.\n'
+                    f'- Ý tưởng tổng thể là: "{topic}"\n'
+                    f'- {prev_context}\n'
+                    f'- Hướng đi cho phần này là về: "{part_summary}"\n'
+                    f'Yêu cầu: Viết một đoạn văn xuôi liền mạch, dài khoảng {chunk_dur} phút đọc. '
+                    f'{chunk_cta}{chunk_techniques}'
+                )
+            else:
+                chunk_prompt = (
+                    f'Now, write a detailed script section for a part of a larger story, IN {language}.\n'
+                    f'- The overall idea (in Vietnamese) is: "{topic}"\n'
+                    f'- {prev_context}\n'
+                    f'- The guideline for this part is: "{part_summary}"\n'
+                    f'Requirement: Write a seamless prose passage of about {chunk_dur} minutes reading time. '
+                    f'{chunk_cta}{chunk_techniques}'
+                )
+
+            chunk_text = call_fn(SYSTEM_INSTRUCTION, chunk_prompt, "script_writer")
+            script_parts.append(chunk_text.strip() if chunk_text else "")
+
+        return "\n\n".join(p for p in script_parts if p)
+
+    def _v3_write_single(self, topic, outline, research, style, language,
+                          duration, channel, is_vi, call_fn) -> str:
+        """Write short script (<=10 min) in a single call."""
+        from writing_styles import build_script_prompt
+
+        system_instruction, style_prompt = build_script_prompt(
+            idea=topic, style=style, language=language,
+            duration=duration, hook_type="", channel_name=channel,
+        )
+
+        if is_vi:
+            prompt = f"""{style_prompt}
+
+【DÀN Ý — TUÂN THEO】
+{outline}
+
+【DỮ LIỆU THAM KHẢO】
+{research[:2000]}
+
+【QUAN TRỌNG】
+- Viết liền mạch, không có tiêu đề hay đánh dấu phần
+- Thời lượng đọc: {duration} phút"""
+        else:
+            prompt = f"""{style_prompt}
+
+【OUTLINE — FOLLOW】
+{outline}
+
+【REFERENCE DATA】
+{research[:2000]}
+
+【IMPORTANT】
+- Write as seamless prose, no section headers
+- Reading duration: {duration} minutes"""
+
+        return call_fn(system_instruction, prompt, "script_writer")
 
     def _run_agent(self, display_name: str, log_id: int, func, attempt: int = 1):
         """Run a single agent, track progress."""

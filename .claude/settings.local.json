@@ -48,7 +48,12 @@
       "Bash(nlm research:*)",
       "Bash(PYTHONIOENCODING=utf-8 python -c \":*)",
       "Bash(ls D:/CODE_2026/SKILL-CREATOR/BONG CHAY NHAT/npb-podcast-app/*.spec)",
-      "Bash(ls D:/CODE_2026/SKILL-CREATOR/BONG CHAY NHAT/npb-podcast-app/*.py)"
+      "Bash(ls D:/CODE_2026/SKILL-CREATOR/BONG CHAY NHAT/npb-podcast-app/*.py)",
+      "Bash(nslookup 9router.ssmedia.top)",
+      "Bash(nslookup ssmedia.top)",
+      "Bash(find D:CODE_2026SKILL-CREATOR -type f -name *.py ! -path */.buildenv/* ! -path */site-packages/* ! -path */.git/*)",
+      "Bash(grep -r \"pytest\\\\|unittest\\\\|mock\" 'D:\\\\CODE_2026\\\\SKILL-CREATOR/BONG CHAY NHAT' --include=*.py --include=*.txt --include=*.cfg --include=*.toml --include=*.ini)",
+      "Bash(find D:/CODE_2026/SKILL-CREATOR -name *.py -type f)"
     ]
   }
 }

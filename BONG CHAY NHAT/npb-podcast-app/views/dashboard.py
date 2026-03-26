@@ -1,5 +1,6 @@
 """
 Dashboard Tab — Create new podcast, select format, recent articles.
+Supports v1, v2, v3 pipelines.
 """
 
 import flet as ft
@@ -23,6 +24,37 @@ FORMATS = [
     ("初心者向け解説", "Beginner Guide"),
 ]
 
+# V3 Writing Styles (from writing_styles.py)
+V3_STYLES = [
+    ("baseball_jp", "Bóng chày Nhật Bản"),
+    ("political", "Phân tích chính trị"),
+    ("spy_771", "Tình báo/Ly kỳ (771)"),
+    ("crime_jp", "Vụ án - Nhật"),
+    ("korea", "Hàn Quốc - Phân tích"),
+    ("air_crash", "Air Crash / Mayday"),
+    ("storytelling", "Kể chuyện"),
+    ("news", "Tin tức / Tài liệu"),
+]
+
+V3_HOOKS = [
+    ("dramatic", "Mở đầu kịch tính"),
+    ("question", "Câu hỏi xoáy sâu"),
+    ("shocking", "Sự thật gây sốc"),
+    ("promise", "Lời hứa hấp dẫn"),
+    ("personal", "Câu chuyện cá nhân"),
+]
+
+V3_LANGUAGES = [
+    ("vi", "Tiếng Việt"),
+    ("en", "Tiếng Anh"),
+    ("ja", "Tiếng Nhật"),
+    ("ko", "Tiếng Hàn"),
+    ("de", "Tiếng Đức"),
+    ("fr", "Tiếng Pháp"),
+    ("pt", "Tiếng Bồ Đào Nha"),
+    ("es", "Tiếng Tây Ban Nha"),
+]
+
 
 class DashboardTab(ft.Column):
     """Dashboard — create new podcast script."""
@@ -38,19 +70,58 @@ class DashboardTab(ft.Column):
     def _build(self):
         # Topic input
         self.topic_input = input_field(
-            label="Topic",
+            label="Topic / Ý tưởng",
             hint="広島東洋カープ vs 中日ドラゴンズ 開幕戦",
             expand=True,
         )
 
-        # Format cards
-        self.format_cards = ft.Row(
-            wrap=True,
-            spacing=10,
-            run_spacing=10,
-        )
+        # Format cards (v1/v2)
+        self.format_cards = ft.Row(wrap=True, spacing=10, run_spacing=10)
         for jp_name, en_name in FORMATS:
             self.format_cards.controls.append(self._format_card(jp_name, en_name))
+
+        # V3 extra fields
+        self.v3_channel_input = input_field(label="Tên kênh (CTA)", hint="NPB Channel", expand=True)
+        self.v3_style_dd = ft.Dropdown(
+            label="Phong cách viết", value="baseball_jp",
+            options=[ft.dropdown.Option(key=k, text=v) for k, v in V3_STYLES],
+            bgcolor=BG_ELEVATED, color=TEXT_PRIMARY, label_style=ft.TextStyle(color=TEXT_SECONDARY),
+            border_color=BORDER, focused_border_color=ACCENT, border_radius=6, expand=True,
+        )
+        self.v3_hook_dd = ft.Dropdown(
+            label="Hook mở đầu", value="dramatic",
+            options=[ft.dropdown.Option(key=k, text=v) for k, v in V3_HOOKS],
+            bgcolor=BG_ELEVATED, color=TEXT_PRIMARY, label_style=ft.TextStyle(color=TEXT_SECONDARY),
+            border_color=BORDER, focused_border_color=ACCENT, border_radius=6, expand=True,
+        )
+        self.v3_lang_dd = ft.Dropdown(
+            label="Ngôn ngữ output", value="ja",
+            options=[ft.dropdown.Option(key=k, text=v) for k, v in V3_LANGUAGES],
+            bgcolor=BG_ELEVATED, color=TEXT_PRIMARY, label_style=ft.TextStyle(color=TEXT_SECONDARY),
+            border_color=BORDER, focused_border_color=ACCENT, border_radius=6, width=180,
+        )
+        self.v3_duration_input = ft.TextField(
+            label="Thời lượng (phút)", hint_text="0 = tự động", value="23", width=120,
+            bgcolor=BG_ELEVATED, color=TEXT_PRIMARY, label_style=ft.TextStyle(color=TEXT_SECONDARY),
+            border_color=BORDER, focused_border_color=ACCENT, border_radius=6,
+        )
+
+        self.v3_panel = ft.Container(
+            content=ft.Column([
+                ft.Text("V3.0 — Viết bài đa phong cách", size=14, weight=ft.FontWeight.W_600, color=ACCENT),
+                self.v3_channel_input,
+                ft.Row([self.v3_style_dd, self.v3_hook_dd], spacing=12),
+                ft.Row([self.v3_lang_dd, self.v3_duration_input], spacing=12),
+            ], spacing=12),
+            **card_style(),
+            visible=False,
+        )
+
+        # Format section (v1/v2 only)
+        self.format_section = ft.Column([
+            ft.Text("Format:", size=14, color=TEXT_SECONDARY),
+            self.format_cards,
+        ], spacing=8, visible=True)
 
         # Pipeline version toggle
         self.version_radio = ft.RadioGroup(
@@ -58,7 +129,8 @@ class DashboardTab(ft.Column):
             on_change=self._on_version_change,
             content=ft.Row([
                 ft.Radio(value="v1", label="v1 (5 agents)", fill_color=ACCENT, label_style=ft.TextStyle(color=TEXT_SECONDARY)),
-                ft.Radio(value="v2", label="v2 (6 sections + supervisor)", fill_color=ACCENT, label_style=ft.TextStyle(color=TEXT_SECONDARY)),
+                ft.Radio(value="v2", label="v2 (sections + review)", fill_color=ACCENT, label_style=ft.TextStyle(color=TEXT_SECONDARY)),
+                ft.Radio(value="v3", label="v3.0 (multi-style)", fill_color=ACCENT, label_style=ft.TextStyle(color=TEXT_PRIMARY, weight=ft.FontWeight.W_600)),
             ]),
         )
 
@@ -70,12 +142,13 @@ class DashboardTab(ft.Column):
             ft.Text("Tạo Podcast Mới", size=24, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
             # Topic
             self.topic_input,
-            # Format
-            ft.Text("Format:", size=14, color=TEXT_SECONDARY),
-            self.format_cards,
             # Pipeline version
             ft.Text("Pipeline:", size=14, color=TEXT_SECONDARY),
             self.version_radio,
+            # V3 panel (shown when v3 selected)
+            self.v3_panel,
+            # Format (shown for v1/v2)
+            self.format_section,
             # Start button
             ft.Container(height=8),
             ft.Row(
@@ -118,6 +191,10 @@ class DashboardTab(ft.Column):
 
     def _on_version_change(self, e):
         self.selected_version = e.control.value
+        is_v3 = self.selected_version == "v3"
+        self.v3_panel.visible = is_v3
+        self.format_section.visible = not is_v3
+        self._page.update()
 
     def _on_start(self, e):
         topic = self.topic_input.value.strip()
@@ -126,7 +203,19 @@ class DashboardTab(ft.Column):
             return
 
         if self.on_start_pipeline:
-            self.on_start_pipeline(topic, self.selected_format, self.selected_version)
+            if self.selected_version == "v3":
+                # V3: pass extra params via format_type as JSON-encoded string
+                import json
+                v3_params = json.dumps({
+                    "style": self.v3_style_dd.value,
+                    "hook": self.v3_hook_dd.value,
+                    "language": self.v3_lang_dd.value,
+                    "duration": int(self.v3_duration_input.value.strip() or "0"),
+                    "channel": self.v3_channel_input.value.strip(),
+                }, ensure_ascii=False)
+                self.on_start_pipeline(topic, v3_params, "v3")
+            else:
+                self.on_start_pipeline(topic, self.selected_format, self.selected_version)
 
     def _load_recent(self):
         """Load recent articles from SQLite."""

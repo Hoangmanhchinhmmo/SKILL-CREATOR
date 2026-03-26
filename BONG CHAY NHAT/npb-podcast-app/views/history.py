@@ -224,7 +224,7 @@ class HistoryTab(ft.Column):
     def _copy_article(self, article_id: int):
         a = get_article(article_id)
         if a:
-            self._page.set_clipboard(a["content"])
+            self._page.run_task(ft.Clipboard().set, a["content"])
             show_snackbar(self._page, "Đã copy nội dung", 2000)
 
     def _edit_article(self, article_id: int):

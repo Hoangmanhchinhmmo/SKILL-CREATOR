@@ -121,7 +121,7 @@ class FirstLaunchView(ft.Column):
         threading.Thread(target=_do_activate, daemon=True).start()
 
     def _copy_machine_code(self, e):
-        self._page.set_clipboard(self.hw_info["machine_code"])
+        self._page.run_task(ft.Clipboard().set, self.hw_info["machine_code"])
         show_snackbar(self._page, "Đã copy Machine Code", 2000)
 
 
@@ -374,7 +374,7 @@ class LicenseTab(ft.Column):
             return expires_str
 
     def _copy_text(self, text: str):
-        self._page.set_clipboard(text)
+        self._page.run_task(ft.Clipboard().set, text)
         show_snackbar(self._page, "Đã copy!", 1500)
 
     def _toggle_key_visibility(self, e):

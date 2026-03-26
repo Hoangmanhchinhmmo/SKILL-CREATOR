@@ -50,7 +50,7 @@ OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # === Agent Settings (cấu hình từ .env) ===
-MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "1"))
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.8"))
 SUPERVISOR_TEMPERATURE = float(os.getenv("SUPERVISOR_TEMPERATURE", "0.3"))
 MAX_OUTPUT_TOKENS = int(os.getenv("MAX_OUTPUT_TOKENS", "16384"))

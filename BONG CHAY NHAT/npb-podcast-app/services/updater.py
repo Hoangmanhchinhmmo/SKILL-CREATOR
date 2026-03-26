@@ -9,7 +9,18 @@ import requests
 
 from db.models import get_setting
 
-APP_VERSION = "1.0.0"
+def _read_version() -> str:
+    """Read version from VERSION file."""
+    for path in [
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "VERSION"),
+        os.path.join(os.path.dirname(os.path.abspath(__import__("sys").executable)), "VERSION"),
+    ]:
+        if os.path.isfile(path):
+            with open(path, "r") as f:
+                return f.read().strip()
+    return "3.0.0"
+
+APP_VERSION = _read_version()
 DEFAULT_UPDATE_URL = "https://be.4mmo.top/api/updates"
 PRODUCT_SLUG = "npb-podcast-writer"
 REQUEST_TIMEOUT = 10

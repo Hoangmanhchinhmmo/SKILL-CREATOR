@@ -40,13 +40,31 @@ BUILD_VENV = ".buildenv"  # Dedicated clean venv for building
 
 COMPANY_NAME = "4MMO"
 PRODUCT_NAME = "NPB Podcast Writer"
-FILE_VERSION = "1.0.0.0"
-PRODUCT_VERSION = "1.0.0.0"
 FILE_DESCRIPTION = "NPB Podcast Script Generator"
 COPYRIGHT = "Copyright 2026 4MMO. All rights reserved."
 
-SKILL_DIR = os.path.abspath(os.path.join("..", "Skill-bong-chay"))
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
+VERSION_FILE = os.path.join(APP_DIR, "VERSION")
+
+
+def _read_version() -> str:
+    if os.path.isfile(VERSION_FILE):
+        with open(VERSION_FILE, "r") as f:
+            return f.read().strip()
+    return "3.0.0"
+
+
+def _bump_version() -> str:
+    """Auto-increment patch version (e.g. 3.0.1 -> 3.0.2)."""
+    ver = _read_version()
+    parts = ver.split(".")
+    parts[-1] = str(int(parts[-1]) + 1)
+    new_ver = ".".join(parts)
+    with open(VERSION_FILE, "w") as f:
+        f.write(new_ver)
+    return new_ver
+
+SKILL_DIR = os.path.abspath(os.path.join("..", "Skill-bong-chay"))
 
 # Files/dirs to exclude when copying Skill-bong-chay
 SKILL_EXCLUDE = ("__pycache__", "*.pyc", "output", ".env", ".git", "*.egg-info")
@@ -236,7 +254,12 @@ def build_pack(skip_venv: bool = False) -> None:
     3. Copy Skill-bong-chay into output
     4. Validate and create zip
     """
-    _print_banner("flet pack (onedir) + Cython protection")
+    # Auto-increment version
+    version = _bump_version()
+    file_version = version + ".0"
+    print(f"  Version: {version}")
+
+    _print_banner(f"flet pack (onedir) v{version}")
 
     # Step 1: Create/verify build venv
     if not skip_venv:
@@ -261,8 +284,8 @@ def build_pack(skip_venv: bool = False) -> None:
         "--distpath", OUTPUT_DIR,
         "--product-name", PRODUCT_NAME,
         "--file-description", FILE_DESCRIPTION,
-        "--product-version", PRODUCT_VERSION,
-        "--file-version", FILE_VERSION,
+        "--product-version", version,
+        "--file-version", file_version,
         "--company-name", COMPANY_NAME,
         "--copyright", COPYRIGHT,
         "--onedir",  # Always onedir — better UX, faster startup
@@ -299,6 +322,10 @@ def build_pack(skip_venv: bool = False) -> None:
             print(f"    {item}")
         sys.exit(1)
 
+    # Copy VERSION file
+    shutil.copy2(VERSION_FILE, os.path.join(dist_dir, "VERSION"))
+    print(f"  OK VERSION -> {version}")
+
     # Step 3: Copy Skill-bong-chay
     print("\n[3/5] Copying pipeline scripts...")
     _copy_skills(dist_dir)
@@ -311,8 +338,16 @@ def build_pack(skip_venv: bool = False) -> None:
     print("\n[5/5] Validating build...")
     _validate_build(dist_dir)
 
-    _print_success(dist_dir, "flet pack (onedir) + Cython protection")
-    _make_zip(dist_dir)
+    _print_success(dist_dir, f"flet pack (onedir) v{version}")
+
+    # Zip with version in filename
+    versioned_zip = os.path.join(OUTPUT_DIR, f"{APP_NAME}-v{version}.zip")
+    if os.path.exists(versioned_zip):
+        os.remove(versioned_zip)
+    zip_path = _make_zip(dist_dir)
+    if os.path.exists(zip_path) and zip_path != versioned_zip:
+        os.rename(zip_path, versioned_zip)
+        print(f"  -> Renamed to {os.path.basename(versioned_zip)}")
 
 
 # ─── Cython Protection ────────────────────────────────────────

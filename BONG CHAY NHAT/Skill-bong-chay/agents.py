@@ -10,7 +10,7 @@ import requests
 import google.generativeai as genai
 from config import (
     AGENT_KEYS, AGENT_MODELS, GEMINI_MODEL, TEMPERATURE, MAX_OUTPUT_TOKENS,
-    TTS_RULES, ROUTER_URL, ROUTER_API_KEY,
+    MAX_RETRIES, TTS_RULES, ROUTER_URL, ROUTER_API_KEY,
 )
 
 _log = logging.getLogger(__name__)
@@ -31,15 +31,27 @@ def _call_via_router(system_prompt: str, user_input: str, model_name: str) -> st
         ],
         "temperature": TEMPERATURE,
         "max_tokens": MAX_OUTPUT_TOKENS,
+        "stream": False,
     }
-    _log.info(f"9router: POST {url} model={model_name}")
-    resp = requests.post(url, json=payload, headers=headers, timeout=300)
-    resp.raise_for_status()
-    data = resp.json()
-    choices = data.get("choices", [])
-    if choices:
-        return choices[0].get("message", {}).get("content", "")
-    return ""
+    import time as _time
+    retries = max(MAX_RETRIES, 1)
+    last_err = None
+    for attempt in range(1, retries + 1):
+        try:
+            _log.info(f"9router: POST {url} model={model_name} (attempt {attempt}/{retries})")
+            resp = requests.post(url, json=payload, headers=headers, timeout=180)
+            resp.raise_for_status()
+            data = resp.json()
+            choices = data.get("choices", [])
+            if choices:
+                return choices[0].get("message", {}).get("content", "")
+            return ""
+        except (requests.exceptions.Timeout, requests.exceptions.HTTPError) as e:
+            last_err = e
+            _log.warning(f"9router: attempt {attempt}/{retries} failed — {e}")
+            if attempt < retries:
+                _time.sleep(3)
+    raise last_err
 
 
 def _call_gemini(system_prompt: str, user_input: str, agent_name: str) -> str:
@@ -134,42 +146,8 @@ def _extract_search_keywords(user_input: str) -> list[str]:
 
 
 def agent_data_collector(user_input: str) -> str:
-    """Agent 1: NPBデータ収集 (Gemini Keyword Extraction + NotebookLM Research)
-
-    1. Geminiでユーザー入力からキーワードを抽出
-    2. NotebookLM Research APIで最新データを検索
-    3. NotebookLMの結果をGeminiで整理・補完
-    """
-    import logging
-    log = logging.getLogger(__name__)
-
-    # Step 1: Geminiでキーワード抽出
-    search_keywords = _extract_search_keywords(user_input)
-    log.info(f"Agent1: extracted keywords: {search_keywords}")
-
-    # Step 2: NotebookLMでデータ収集（キーワードベース、ハードコードなし）
-    nlm_data = ""
-    try:
-        from nlm_data import collect_npb_data
-        nlm_data = collect_npb_data(user_input, search_keywords=search_keywords)
-    except Exception as e:
-        log.warning(f"Agent1: NotebookLM unavailable — {e}")
-
-    # Step 3: Geminiで整理
-    if nlm_data:
-        prompt = f"""以下はNotebookLMから取得した実データです。
-このデータをもとに、試合プレビューに必要な情報を整理してください。
-データに不足がある場合は、一般知識で補完してください。
-
-【ユーザーの入力】
-{user_input}
-
-【NotebookLMデータ】
-{nlm_data}"""
-    else:
-        prompt = user_input
-
-    return _call_gemini(AGENT1_SYSTEM, prompt, "data_collector")
+    """Agent 1: NPBデータ収集 — Geminiでデータを収集・整理"""
+    return _call_gemini(AGENT1_SYSTEM, user_input, "data_collector")
 
 
 # ============================================================

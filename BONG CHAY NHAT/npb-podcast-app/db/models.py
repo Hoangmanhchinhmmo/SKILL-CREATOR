@@ -29,6 +29,19 @@ def create_article(topic: str, format: str, content: str, conn=None) -> int:
             conn.close()
 
 
+def update_article_titles(article_id: int, titles: str):
+    """Update article titles (JSON list of suggested titles)."""
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE articles SET titles = ?, updated_at = ? WHERE id = ?",
+            (titles, datetime.datetime.now().isoformat(), article_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def update_article_content(article_id: int, content: str):
     """Update article content and updated_at timestamp."""
     conn = get_connection()

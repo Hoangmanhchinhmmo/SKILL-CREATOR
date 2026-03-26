@@ -149,9 +149,17 @@ class HistoryTab(ft.Column):
         created = (article.get("created_at") or "")[:16]
         article_id = article["id"]
 
+        # Check if article has titles
+        titles_raw = article.get("titles", "")
+
         # Action buttons
         actions = []
         if status == "completed":
+            if titles_raw:
+                actions.append(ft.IconButton(
+                    icon=ft.Icons.TITLE_ROUNDED, icon_size=18, icon_color=ACCENT,
+                    tooltip="Xem tiêu đề", on_click=lambda e, tr=titles_raw: self._show_titles(tr),
+                ))
             actions.append(ft.IconButton(
                 icon=ft.Icons.COPY_ROUNDED, icon_size=18, icon_color=TEXT_MUTED,
                 tooltip="Copy", on_click=lambda e, aid=article_id: self._copy_article(aid),
@@ -220,6 +228,43 @@ class HistoryTab(ft.Column):
         if self.current_page < total_pages:
             self.current_page += 1
             self._load_articles()
+
+    def _show_titles(self, titles_raw: str):
+        """Show titles dialog with copy buttons."""
+        import json
+        try:
+            titles = json.loads(titles_raw)
+        except (json.JSONDecodeError, TypeError):
+            titles = []
+
+        if not titles:
+            show_snackbar(self._page, "Không có tiêu đề", 2000)
+            return
+
+        all_titles_text = "\n".join(f"{i}. {t}" for i, t in enumerate(titles, 1))
+
+        title_rows = []
+        for i, title in enumerate(titles, 1):
+            title_rows.append(
+                ft.Text(f"{i}. {title}", size=13, color=TEXT_PRIMARY, selectable=True),
+            )
+
+        def on_copy_all(e):
+            self._page.run_task(ft.Clipboard().set, all_titles_text)
+            show_snackbar(self._page, "Đã copy 5 tiêu đề", 1500)
+
+        def on_close(e):
+            close_dialog(self._page, dialog)
+
+        dialog = ft.AlertDialog(
+            title=ft.Text("Tiêu đề gợi ý", size=16, weight=ft.FontWeight.W_600),
+            content=ft.Column(title_rows, spacing=8, width=500),
+            actions=[
+                ft.TextButton("Copy tất cả", on_click=on_copy_all),
+                ft.TextButton("Đóng", on_click=on_close),
+            ],
+        )
+        show_dialog(self._page, dialog)
 
     def _copy_article(self, article_id: int):
         a = get_article(article_id)

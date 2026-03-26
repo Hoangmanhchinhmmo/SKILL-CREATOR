@@ -93,6 +93,12 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_pipeline_runs_status ON pipeline_runs(status);
             CREATE INDEX IF NOT EXISTS idx_agent_logs_run ON agent_logs(run_id);
         """)
+        # Migration: add titles column if missing
+        try:
+            conn.execute("SELECT titles FROM articles LIMIT 1")
+        except sqlite3.OperationalError:
+            conn.execute("ALTER TABLE articles ADD COLUMN titles TEXT DEFAULT ''")
+
         conn.commit()
     finally:
         conn.close()

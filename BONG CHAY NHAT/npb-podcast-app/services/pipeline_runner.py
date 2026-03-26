@@ -111,6 +111,9 @@ def _post_process(text: str) -> str:
 
 
 # Agent definitions for v2 pipeline
+# Title Generation is appended to ALL pipelines automatically
+_TITLE_AGENT = {"name": "Title Generation", "key": "title_gen"}
+
 V2_AGENTS = [
     {"name": "Data Collection", "key": "data_collector"},
     {"name": "Tactical Analysis", "key": "tactical_analyst"},
@@ -121,6 +124,7 @@ V2_AGENTS = [
     {"name": "Unique Perspective", "key": "perspective"},
     {"name": "Prediction & Ending", "key": "prediction"},
     {"name": "Post-processing", "key": "postprocess"},
+    _TITLE_AGENT,
 ]
 
 V1_AGENTS = [
@@ -129,12 +133,14 @@ V1_AGENTS = [
     {"name": "Unique Perspective", "key": "unique_perspective"},
     {"name": "Script Writer", "key": "script_writer"},
     {"name": "Quality Checker", "key": "quality_checker"},
+    _TITLE_AGENT,
 ]
 
 V3_AGENTS = [
     {"name": "Research", "key": "v3_research"},
     {"name": "Outline", "key": "v3_outline"},
     {"name": "Writing", "key": "v3_writing"},
+    _TITLE_AGENT,
 ]
 
 
@@ -214,8 +220,19 @@ class PipelineRunner:
                 self.on_error("Pipeline đã bị hủy")
                 return
 
+            # Title Generation (shared across all pipelines)
+            titles_json = ""
+            if result and "title_gen" in agent_log_ids:
+                try:
+                    titles_json = self._generate_titles(result, agent_log_ids["title_gen"])
+                except Exception as e:
+                    self._log("Title Gen", f"Failed (non-fatal): {e}")
+
             # Save article
             self.article_id = create_article(topic, format_type, result)
+            if titles_json:
+                from db.models import update_article_titles
+                update_article_titles(self.article_id, titles_json)
             update_pipeline_run(self.run_id, article_id=self.article_id)
             self._finish_run("completed", start_time)
             self.on_complete(self.article_id, self.run_id)
@@ -611,6 +628,41 @@ Language: {language}
 - Reading duration: {duration} minutes"""
 
         return call_fn(system_instruction, prompt, "script_writer")
+
+    def _generate_titles(self, script: str, log_id: int) -> str:
+        """Generate 3-5 title suggestions from script content. Shared by all pipelines."""
+        import json as _json
+        import importlib
+
+        if "title_generator" in sys.modules:
+            importlib.reload(sys.modules["title_generator"])
+        if "agents" in sys.modules:
+            importlib.reload(sys.modules["agents"])
+
+        from title_generator import build_title_prompt, parse_titles
+        from agents import _call_gemini
+
+        self.on_progress("Title Generation", "running", 1, "Generating titles...")
+        update_agent_log(log_id, status="running", attempt=1,
+                         started_at=datetime.datetime.now().isoformat())
+        self._log("Title Gen", "Generating 5 title suggestions...")
+
+        system_inst, prompt = build_title_prompt(script)
+        raw = _call_gemini(system_inst, prompt, "quality_checker")
+        titles = parse_titles(raw) if raw else []
+
+        if titles:
+            self._log("Title Gen", f"Generated {len(titles)} titles")
+            for i, t in enumerate(titles, 1):
+                self._log("Title Gen", f"  {i}. {t}")
+        else:
+            self._log("Title Gen", "No titles parsed")
+
+        update_agent_log(log_id, status="passed",
+                         finished_at=datetime.datetime.now().isoformat())
+        self.on_progress("Title Generation", "passed", 1, f"{len(titles)} titles")
+
+        return _json.dumps(titles, ensure_ascii=False)
 
     def _run_agent(self, display_name: str, log_id: int, func, attempt: int = 1):
         """Run a single agent, track progress."""

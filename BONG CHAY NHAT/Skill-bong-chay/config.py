@@ -15,7 +15,6 @@ if _raw_router_url.endswith("/v1"):
     _raw_router_url = _raw_router_url[:-3]
 ROUTER_URL = _raw_router_url  # e.g. http://localhost:20128
 ROUTER_API_KEY = os.getenv("ROUTER_API_KEY", "")  # API key cho 9router
-ROUTER_FALLBACK_URL = os.getenv("ROUTER_FALLBACK_URL", "http://localhost:20128")  # Fallback khi remote fail
 
 # === Gemini API Keys (3 keys xoay vòng giữa các agent) ===
 GEMINI_API_KEY_WRITER = os.getenv("GEMINI_API_KEY_WRITER", "")

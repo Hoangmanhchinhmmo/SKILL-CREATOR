@@ -10,7 +10,7 @@ import requests
 import google.generativeai as genai
 from config import (
     AGENT_KEYS, AGENT_MODELS, GEMINI_MODEL, TEMPERATURE, MAX_OUTPUT_TOKENS,
-    MAX_RETRIES, TTS_RULES, ROUTER_URL, ROUTER_API_KEY, ROUTER_FALLBACK_URL,
+    MAX_RETRIES, TTS_RULES, ROUTER_URL, ROUTER_API_KEY,
 )
 
 _log = logging.getLogger(__name__)
@@ -35,36 +35,23 @@ def _call_via_router(system_prompt: str, user_input: str, model_name: str) -> st
     }
     import time as _time
     retries = max(MAX_RETRIES, 1)
-
-    # Try primary URL, then fallback if different
-    urls_to_try = [url]
-    fallback_url = f"{ROUTER_FALLBACK_URL}/v1/chat/completions"
-    if ROUTER_FALLBACK_URL and fallback_url != url:
-        urls_to_try.append(fallback_url)
-
     last_err = None
-    for try_url in urls_to_try:
-        for attempt in range(1, retries + 1):
-            try:
-                _log.info(f"9router: POST {try_url} model={model_name} (attempt {attempt}/{retries})")
-                resp = requests.post(try_url, json=payload, headers=headers, timeout=180)
-                resp.raise_for_status()
-                data = resp.json()
-                choices = data.get("choices", [])
-                if choices:
-                    return choices[0].get("message", {}).get("content", "")
-                return ""
-            except (requests.exceptions.Timeout, requests.exceptions.HTTPError,
-                    requests.exceptions.ConnectionError) as e:
-                last_err = e
-                _log.warning(f"9router: {try_url} attempt {attempt}/{retries} failed — {e}")
-                if attempt < retries:
-                    _time.sleep(3)
-
-        # Primary failed all retries → try fallback
-        if try_url == url and fallback_url != url:
-            _log.info(f"9router: primary failed, trying fallback {ROUTER_FALLBACK_URL}")
-
+    for attempt in range(1, retries + 1):
+        try:
+            _log.info(f"9router: POST {url} model={model_name} (attempt {attempt}/{retries})")
+            resp = requests.post(url, json=payload, headers=headers, timeout=180)
+            resp.raise_for_status()
+            data = resp.json()
+            choices = data.get("choices", [])
+            if choices:
+                return choices[0].get("message", {}).get("content", "")
+            return ""
+        except (requests.exceptions.Timeout, requests.exceptions.HTTPError,
+                requests.exceptions.ConnectionError) as e:
+            last_err = e
+            _log.warning(f"9router: attempt {attempt}/{retries} failed — {e}")
+            if attempt < retries:
+                _time.sleep(3)
     raise last_err
 
 

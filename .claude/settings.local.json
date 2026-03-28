@@ -53,7 +53,8 @@
       "Bash(nslookup ssmedia.top)",
       "Bash(find D:CODE_2026SKILL-CREATOR -type f -name *.py ! -path */.buildenv/* ! -path */site-packages/* ! -path */.git/*)",
       "Bash(grep -r \"pytest\\\\|unittest\\\\|mock\" 'D:\\\\CODE_2026\\\\SKILL-CREATOR/BONG CHAY NHAT' --include=*.py --include=*.txt --include=*.cfg --include=*.toml --include=*.ini)",
-      "Bash(find D:/CODE_2026/SKILL-CREATOR -name *.py -type f)"
+      "Bash(find D:/CODE_2026/SKILL-CREATOR -name *.py -type f)",
+      "Bash(find /d/CODE_2026/SKILL-CREATOR/BONG CHAY NHAT/npb-podcast-app -name *.py -path */translator* -type f)"
     ]
   }
 }

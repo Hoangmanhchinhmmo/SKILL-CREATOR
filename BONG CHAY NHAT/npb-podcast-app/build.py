@@ -78,6 +78,8 @@ BUILD_REQUIREMENTS = [
     "requests>=2.31.0",
     "google-generativeai>=0.8.0",
     "python-dotenv>=1.0.0",
+    "beautifulsoup4>=4.12.0",
+    "yt-dlp>=2024.0.0",
     "pyinstaller>=6.0.0",
 ]
 

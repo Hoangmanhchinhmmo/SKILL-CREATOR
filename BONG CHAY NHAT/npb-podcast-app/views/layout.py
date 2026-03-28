@@ -17,15 +17,22 @@ class SidebarItem:
         self.index = index
 
 
-SIDEBAR_ITEMS = [
+SIDEBAR_ITEMS_TOP = [
     SidebarItem(ft.Icons.HOME_ROUNDED, "Dashboard", 0),
     SidebarItem(ft.Icons.PLAY_CIRCLE_ROUNDED, "Pipeline", 1),
     SidebarItem(ft.Icons.LIST_ALT_ROUNDED, "Lịch sử", 2),
     SidebarItem(ft.Icons.EDIT_NOTE_ROUNDED, "Editor", 3),
-    SidebarItem(ft.Icons.SETTINGS_ROUNDED, "Cấu hình", 4),
 ]
 
-LICENSE_ITEM = SidebarItem(ft.Icons.KEY_ROUNDED, "License", 5)
+SIDEBAR_ITEMS_BOTTOM_GROUP = [
+    SidebarItem(ft.Icons.TRANSLATE_ROUNDED, "Dịch Truyện", 4),
+]
+
+SETTINGS_ITEM = SidebarItem(ft.Icons.SETTINGS_ROUNDED, "Cấu hình", 5)
+LICENSE_ITEM = SidebarItem(ft.Icons.KEY_ROUNDED, "License", 6)
+
+# Keep SIDEBAR_ITEMS for backward compat (all nav items)
+SIDEBAR_ITEMS = SIDEBAR_ITEMS_TOP + SIDEBAR_ITEMS_BOTTOM_GROUP + [SETTINGS_ITEM]
 
 
 class MainLayout(ft.Column):
@@ -84,9 +91,14 @@ class MainLayout(ft.Column):
 
     def _build_sidebar(self) -> ft.Container:
         """Build icon sidebar."""
-        nav_buttons = []
-        for item in SIDEBAR_ITEMS:
-            nav_buttons.append(self._sidebar_button(item))
+        # Top group: NPB podcast tabs
+        top_buttons = [self._sidebar_button(item) for item in SIDEBAR_ITEMS_TOP]
+
+        # Bottom group: Translator
+        translator_buttons = [self._sidebar_button(item) for item in SIDEBAR_ITEMS_BOTTOM_GROUP]
+
+        # Settings
+        settings_btn = self._sidebar_button(SETTINGS_ITEM)
 
         # License button at bottom
         license_btn = self._sidebar_button(LICENSE_ITEM)
@@ -100,10 +112,18 @@ class MainLayout(ft.Column):
                     alignment=ft.Alignment(0, 0),
                 ),
                 ft.Divider(height=1, color=BORDER),
-                # Nav items
-                ft.Column(nav_buttons, spacing=4, expand=True),
-                # Bottom
+                # Top nav items (Dashboard, Pipeline, History, Editor)
+                ft.Column(top_buttons, spacing=4),
+                # Divider between groups
+                ft.Container(
+                    content=ft.Divider(height=1, color=BORDER),
+                    margin=ft.margin.symmetric(vertical=4, horizontal=8),
+                ),
+                # Translator group
+                ft.Column(translator_buttons, spacing=4, expand=True),
+                # Bottom system items
                 ft.Divider(height=1, color=BORDER),
+                settings_btn,
                 license_btn,
             ],
             spacing=0,

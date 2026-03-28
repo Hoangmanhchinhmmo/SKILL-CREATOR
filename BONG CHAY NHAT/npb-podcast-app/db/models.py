@@ -398,3 +398,178 @@ def clear_license_cache():
         conn.commit()
     finally:
         conn.close()
+
+
+# =============================================================================
+# TRANSLATIONS
+# =============================================================================
+
+def create_translation(title: str, source_text: str, source_lang: str = "vi",
+                       source_type: str = "paste", source_url: str = None,
+                       config_json: str = None) -> int:
+    """Insert a new translation project, return its id."""
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            """INSERT INTO translations (title, source_text, source_lang, source_type, source_url, config_json)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (title, source_text, source_lang, source_type, source_url, config_json),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def get_translation(translation_id: int) -> dict | None:
+    """Get a single translation by id."""
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT * FROM translations WHERE id = ?", (translation_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def update_translation(translation_id: int, **kwargs):
+    """Update translation fields. Accepted keys: title, result_text, config_json,
+    mapping_json, status, total_segments, completed_segments."""
+    allowed = {"title", "result_text", "config_json", "mapping_json", "status",
+               "total_segments", "completed_segments"}
+    updates = []
+    params = []
+    for key, val in kwargs.items():
+        if key in allowed:
+            updates.append(f"{key} = ?")
+            params.append(val)
+    if not updates:
+        return
+    updates.append("updated_at = ?")
+    params.append(datetime.datetime.now().isoformat())
+    params.append(translation_id)
+    conn = get_connection()
+    try:
+        conn.execute(f"UPDATE translations SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_translation(translation_id: int):
+    """Delete a translation and its segments."""
+    conn = get_connection()
+    try:
+        conn.execute("DELETE FROM translation_segments WHERE translation_id = ?", (translation_id,))
+        conn.execute("DELETE FROM translations WHERE id = ?", (translation_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def list_translations(search: str = "", status_filter: str = "",
+                      sort: str = "newest", page: int = 1, per_page: int = 15) -> tuple[list[dict], int]:
+    """List translations with search, filter, sort, pagination."""
+    conn = get_connection()
+    try:
+        where_clauses = []
+        params = []
+        if search:
+            where_clauses.append("title LIKE ?")
+            params.append(f"%{search}%")
+        if status_filter:
+            where_clauses.append("status = ?")
+            params.append(status_filter)
+
+        where_sql = ""
+        if where_clauses:
+            where_sql = "WHERE " + " AND ".join(where_clauses)
+
+        sort_map = {"newest": "created_at DESC", "oldest": "created_at ASC"}
+        order_sql = sort_map.get(sort, "created_at DESC")
+
+        total = conn.execute(f"SELECT COUNT(*) FROM translations {where_sql}", params).fetchone()[0]
+        offset = (page - 1) * per_page
+        rows = conn.execute(
+            f"SELECT * FROM translations {where_sql} ORDER BY {order_sql} LIMIT ? OFFSET ?",
+            params + [per_page, offset],
+        ).fetchall()
+        return [dict(r) for r in rows], total
+    finally:
+        conn.close()
+
+
+def get_translation_count() -> int:
+    conn = get_connection()
+    try:
+        return conn.execute("SELECT COUNT(*) FROM translations").fetchone()[0]
+    finally:
+        conn.close()
+
+
+# =============================================================================
+# TRANSLATION SEGMENTS
+# =============================================================================
+
+def create_translation_segments(translation_id: int, segments: list[str]) -> list[int]:
+    """Bulk insert segments for a translation. Returns list of segment ids."""
+    conn = get_connection()
+    try:
+        ids = []
+        for idx, text in enumerate(segments):
+            cursor = conn.execute(
+                """INSERT INTO translation_segments (translation_id, segment_index, source_text)
+                   VALUES (?, ?, ?)""",
+                (translation_id, idx, text),
+            )
+            ids.append(cursor.lastrowid)
+        conn.execute(
+            "UPDATE translations SET total_segments = ?, updated_at = ? WHERE id = ?",
+            (len(segments), datetime.datetime.now().isoformat(), translation_id),
+        )
+        conn.commit()
+        return ids
+    finally:
+        conn.close()
+
+
+def get_translation_segments(translation_id: int) -> list[dict]:
+    """Get all segments for a translation, ordered by index."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM translation_segments WHERE translation_id = ? ORDER BY segment_index ASC",
+            (translation_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def update_translation_segment(segment_id: int, result_text: str = None, status: str = None):
+    """Update a segment's result and/or status."""
+    conn = get_connection()
+    try:
+        updates = []
+        params = []
+        if result_text is not None:
+            updates.append("result_text = ?")
+            params.append(result_text)
+        if status is not None:
+            updates.append("status = ?")
+            params.append(status)
+        if updates:
+            params.append(segment_id)
+            conn.execute(f"UPDATE translation_segments SET {', '.join(updates)} WHERE id = ?", params)
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_translation_segments(translation_id: int):
+    """Delete all segments for a translation."""
+    conn = get_connection()
+    try:
+        conn.execute("DELETE FROM translation_segments WHERE translation_id = ?", (translation_id,))
+        conn.commit()
+    finally:
+        conn.close()

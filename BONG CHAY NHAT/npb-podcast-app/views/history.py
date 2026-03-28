@@ -1,7 +1,9 @@
 """
-History Tab — Browse, search, filter, paginate past articles.
+History Tab — Browse, search, filter past articles with rich cards.
+V3.0 redesign: preview content, titles, pipeline version badges.
 """
 
+import json
 import flet as ft
 from theme import (
     show_snackbar, show_dialog, close_dialog,
@@ -11,13 +13,7 @@ from theme import (
 )
 from db.models import list_articles, delete_article, get_article
 
-FORMATS_ALL = [
-    "", "試合プレビュー", "週間まとめ", "パワーランキング",
-    "チーム深掘り分析", "選手スポットライト", "戦術ブレイクダウン",
-    "ポストシーズン予測", "初心者向け解説",
-]
-
-PER_PAGE = 20
+PER_PAGE = 15
 
 
 class HistoryTab(ft.Column):
@@ -32,68 +28,75 @@ class HistoryTab(ft.Column):
         self.current_page = 1
         self.total_count = 0
         self.search_value = ""
-        self.format_filter = ""
         self.status_filter = ""
         self.sort_value = "newest"
 
         self._build()
 
     def _build(self):
-        # Search bar
-        self.search_input = input_field(hint="Tìm kiếm topic...", expand=True, on_change=self._on_search_change)
-
-        # Filters
-        self.format_dropdown = ft.Dropdown(
-            label="Format",
-            value="",
-            options=[ft.dropdown.Option(f, f if f else "Tất cả") for f in FORMATS_ALL],
-            bgcolor=BG_ELEVATED, color=TEXT_PRIMARY, label_style=ft.TextStyle(color=TEXT_SECONDARY),
-            border_color=BORDER, focused_border_color=ACCENT, border_radius=6,
-            width=180, on_select=self._on_filter_change,
+        # Search bar with icon
+        self.search_input = ft.TextField(
+            hint_text="Tìm kiếm topic...",
+            prefix_icon=ft.Icons.SEARCH_ROUNDED,
+            bgcolor=BG_ELEVATED, color=TEXT_PRIMARY,
+            border_color=BORDER, focused_border_color=ACCENT, border_radius=8,
+            expand=True, on_change=self._on_search_change,
+            content_padding=ft.padding.symmetric(horizontal=12, vertical=8),
         )
 
+        # Compact filters
         self.status_dropdown = ft.Dropdown(
-            label="Status",
             value="",
             options=[
                 ft.dropdown.Option("", "Tất cả"),
-                ft.dropdown.Option("completed", "Completed"),
-                ft.dropdown.Option("failed", "Failed"),
+                ft.dropdown.Option("completed", "Hoàn tất"),
+                ft.dropdown.Option("failed", "Lỗi"),
             ],
-            bgcolor=BG_ELEVATED, color=TEXT_PRIMARY, label_style=ft.TextStyle(color=TEXT_SECONDARY),
+            bgcolor=BG_ELEVATED, color=TEXT_PRIMARY,
             border_color=BORDER, focused_border_color=ACCENT, border_radius=6,
-            width=150, on_select=self._on_filter_change,
+            width=120, on_select=self._on_filter_change,
+            content_padding=ft.padding.symmetric(horizontal=8, vertical=4),
         )
 
         self.sort_dropdown = ft.Dropdown(
-            label="Sort",
             value="newest",
             options=[
                 ft.dropdown.Option("newest", "Mới nhất"),
                 ft.dropdown.Option("oldest", "Cũ nhất"),
-                ft.dropdown.Option("duration", "Thời gian chạy"),
+                ft.dropdown.Option("duration", "Lâu nhất"),
             ],
-            bgcolor=BG_ELEVATED, color=TEXT_PRIMARY, label_style=ft.TextStyle(color=TEXT_SECONDARY),
+            bgcolor=BG_ELEVATED, color=TEXT_PRIMARY,
             border_color=BORDER, focused_border_color=ACCENT, border_radius=6,
-            width=150, on_select=self._on_filter_change,
+            width=120, on_select=self._on_filter_change,
+            content_padding=ft.padding.symmetric(horizontal=8, vertical=4),
         )
 
         # Article list
-        self.article_list = ft.Column(spacing=8, expand=True, scroll=ft.ScrollMode.AUTO)
+        self.article_list = ft.Column(spacing=10, expand=True, scroll=ft.ScrollMode.AUTO)
 
         # Pagination
         self.page_info = ft.Text("", size=12, color=TEXT_MUTED)
-        self.prev_btn = ft.IconButton(icon=ft.Icons.CHEVRON_LEFT, icon_color=TEXT_SECONDARY, on_click=self._prev_page)
-        self.next_btn = ft.IconButton(icon=ft.Icons.CHEVRON_RIGHT, icon_color=TEXT_SECONDARY, on_click=self._next_page)
-        self.page_label = ft.Text("1", size=13, color=TEXT_PRIMARY)
+        self.prev_btn = ft.IconButton(icon=ft.Icons.CHEVRON_LEFT, icon_size=20, icon_color=TEXT_SECONDARY, on_click=self._prev_page)
+        self.next_btn = ft.IconButton(icon=ft.Icons.CHEVRON_RIGHT, icon_size=20, icon_color=TEXT_SECONDARY, on_click=self._next_page)
+        self.page_label = ft.Text("1", size=13, color=TEXT_PRIMARY, weight=ft.FontWeight.W_600)
 
         self.controls = [
-            ft.Text("Lịch sử bài viết", size=24, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
-            self.search_input,
-            ft.Row([self.format_dropdown, self.status_dropdown, self.sort_dropdown], spacing=12),
-            self.article_list,
+            # Header
             ft.Row([
+                ft.Text("Lịch sử", size=24, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+                ft.Container(expand=True),
                 self.page_info,
+            ]),
+            # Search + filters
+            ft.Row([
+                self.search_input,
+                self.status_dropdown,
+                self.sort_dropdown,
+            ], spacing=8),
+            # Articles
+            self.article_list,
+            # Pagination
+            ft.Row([
                 ft.Container(expand=True),
                 self.prev_btn,
                 self.page_label,
@@ -107,7 +110,6 @@ class HistoryTab(ft.Column):
         """Load articles from DB with current filters."""
         articles, total = list_articles(
             search=self.search_value,
-            format_filter=self.format_filter,
             status_filter=self.status_filter,
             sort=self.sort_value,
             page=self.current_page,
@@ -122,88 +124,160 @@ class HistoryTab(ft.Column):
             self.article_list.controls.append(
                 ft.Container(
                     content=ft.Column([
-                        ft.Icon(ft.Icons.ARTICLE_OUTLINED, size=48, color=TEXT_MUTED),
-                        ft.Text("Không có bài viết nào", size=14, color=TEXT_MUTED),
+                        ft.Icon(ft.Icons.HISTORY_ROUNDED, size=48, color=TEXT_MUTED),
+                        ft.Text("Chưa có bài viết nào", size=14, color=TEXT_MUTED),
                     ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
                     alignment=ft.Alignment(0, 0),
-                    padding=40,
+                    padding=60,
                 )
             )
         else:
             for a in articles:
                 self.article_list.controls.append(self._article_card(a))
 
-        self.page_info.value = f"Tổng: {total} bài"
-        self.page_label.value = f"{self.current_page} / {total_pages}"
+        self.page_info.value = f"{total} bài viết"
+        self.page_label.value = f"{self.current_page}/{total_pages}"
         self.prev_btn.disabled = self.current_page <= 1
         self.next_btn.disabled = self.current_page >= total_pages
 
         self._page.update()
 
     def _article_card(self, article: dict) -> ft.Container:
-        """Build a card for one article."""
+        """Build a rich card for one article."""
         status = article.get("run_status", "completed") or "completed"
-        status_icon = "✅" if status == "completed" else "❌"
         total_time = article.get("total_time")
-        time_str = f"{int(total_time // 60)}:{int(total_time % 60):02d}" if total_time else "—"
-        created = (article.get("created_at") or "")[:16]
+        created = (article.get("created_at") or "")[:16].replace("T", " ")
         article_id = article["id"]
-
-        # Check if article has titles
+        content = article.get("content", "")
         titles_raw = article.get("titles", "")
+        fmt = article.get("format", "")
 
-        # Action buttons
-        actions = []
+        # Status badge
         if status == "completed":
-            if titles_raw:
-                actions.append(ft.IconButton(
-                    icon=ft.Icons.TITLE_ROUNDED, icon_size=18, icon_color=ACCENT,
-                    tooltip="Xem tiêu đề", on_click=lambda e, tr=titles_raw: self._show_titles(tr),
-                ))
-            actions.append(ft.IconButton(
-                icon=ft.Icons.COPY_ROUNDED, icon_size=18, icon_color=TEXT_MUTED,
-                tooltip="Copy", on_click=lambda e, aid=article_id: self._copy_article(aid),
-            ))
+            status_ctl = ft.Container(
+                content=ft.Text("OK", size=10, color="#fff", weight=ft.FontWeight.BOLD),
+                bgcolor=SUCCESS, border_radius=4,
+                padding=ft.padding.symmetric(horizontal=6, vertical=2),
+            )
         else:
-            actions.append(ft.IconButton(
-                icon=ft.Icons.LIST_ALT_ROUNDED, icon_size=18, icon_color=TEXT_MUTED,
-                tooltip="Logs",
-            ))
+            status_ctl = ft.Container(
+                content=ft.Text("FAIL", size=10, color="#fff", weight=ft.FontWeight.BOLD),
+                bgcolor=DANGER, border_radius=4,
+                padding=ft.padding.symmetric(horizontal=6, vertical=2),
+            )
 
-        actions.extend([
-            ft.IconButton(
-                icon=ft.Icons.EDIT_ROUNDED, icon_size=18, icon_color=TEXT_MUTED,
-                tooltip="Edit", on_click=lambda e, aid=article_id: self._edit_article(aid),
-            ),
-            ft.IconButton(
-                icon=ft.Icons.DELETE_ROUNDED, icon_size=18, icon_color=TEXT_MUTED,
-                tooltip="Xóa", on_click=lambda e, aid=article_id: self._delete_article(aid),
-            ),
-            ft.IconButton(
-                icon=ft.Icons.REPLAY_ROUNDED, icon_size=18, icon_color=TEXT_MUTED,
-                tooltip="Run lại",
-                on_click=lambda e, t=article["topic"], f=article["format"]: self._rerun(t, f),
-            ),
-        ])
+        # Time badge
+        if total_time:
+            m = int(total_time // 60)
+            s = int(total_time % 60)
+            time_ctl = ft.Text(f"{m}:{s:02d}", size=11, color=TEXT_MUTED)
+        else:
+            time_ctl = ft.Text("—", size=11, color=TEXT_MUTED)
+
+        # Content preview (first 120 chars)
+        preview = ""
+        if content:
+            preview = content[:120].replace("\n", " ").strip()
+            if len(content) > 120:
+                preview += "..."
+
+        # Title preview (first title if available)
+        title_preview = None
+        if titles_raw:
+            try:
+                titles = json.loads(titles_raw)
+                if titles:
+                    title_preview = titles[0]
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Format badge
+        fmt_short = fmt[:12] if fmt else ""
+
+        # Action buttons row
+        actions = []
+        if titles_raw:
+            actions.append(ft.TextButton(
+                content=ft.Row([
+                    ft.Icon(ft.Icons.TITLE_ROUNDED, size=14, color=ACCENT),
+                    ft.Text("Titles", size=11, color=ACCENT),
+                ], spacing=4, tight=True),
+                on_click=lambda e, tr=titles_raw: self._show_titles(tr),
+            ))
+        if status == "completed":
+            actions.append(ft.TextButton(
+                content=ft.Row([
+                    ft.Icon(ft.Icons.COPY_ROUNDED, size=14, color=TEXT_SECONDARY),
+                    ft.Text("Copy", size=11, color=TEXT_SECONDARY),
+                ], spacing=4, tight=True),
+                on_click=lambda e, aid=article_id: self._copy_article(aid),
+            ))
+        actions.append(ft.TextButton(
+            content=ft.Row([
+                ft.Icon(ft.Icons.EDIT_ROUNDED, size=14, color=TEXT_SECONDARY),
+                ft.Text("Edit", size=11, color=TEXT_SECONDARY),
+            ], spacing=4, tight=True),
+            on_click=lambda e, aid=article_id: self._edit_article(aid),
+        ))
+        actions.append(ft.TextButton(
+            content=ft.Row([
+                ft.Icon(ft.Icons.REPLAY_ROUNDED, size=14, color=TEXT_SECONDARY),
+                ft.Text("Rerun", size=11, color=TEXT_SECONDARY),
+            ], spacing=4, tight=True),
+            on_click=lambda e, t=article["topic"], f=fmt: self._rerun(t, f),
+        ))
+        actions.append(ft.IconButton(
+            icon=ft.Icons.DELETE_OUTLINE_ROUNDED, icon_size=16, icon_color=TEXT_MUTED,
+            tooltip="Xóa", on_click=lambda e, aid=article_id: self._delete_article(aid),
+        ))
+
+        # Build card
+        card_content = [
+            # Row 1: Status + Topic + Time + Date
+            ft.Row([
+                status_ctl,
+                ft.Text(article["topic"][:60], size=14, color=TEXT_PRIMARY,
+                        weight=ft.FontWeight.W_600, expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                time_ctl,
+                ft.Text(created, size=11, color=TEXT_MUTED),
+            ], spacing=8),
+        ]
+
+        # Row 2: Title preview (if available)
+        if title_preview:
+            card_content.append(
+                ft.Row([
+                    ft.Icon(ft.Icons.TITLE_ROUNDED, size=12, color=ACCENT),
+                    ft.Text(title_preview, size=12, color=ACCENT, max_lines=1,
+                            overflow=ft.TextOverflow.ELLIPSIS, expand=True, italic=True),
+                ], spacing=4),
+            )
+
+        # Row 3: Content preview
+        if preview:
+            card_content.append(
+                ft.Text(preview, size=12, color=TEXT_MUTED, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
+            )
+
+        # Row 4: Format badge + Actions
+        card_content.append(
+            ft.Row([
+                ft.Container(
+                    content=ft.Text(fmt_short, size=10, color=TEXT_SECONDARY),
+                    bgcolor=BG_ELEVATED, border_radius=4,
+                    padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                ) if fmt_short else ft.Container(),
+                ft.Container(expand=True),
+                *actions,
+            ], spacing=0, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        )
 
         return ft.Container(
-            content=ft.Column([
-                ft.Row([
-                    ft.Text(f"{status_icon}  {article['topic'][:50]}", size=14, color=TEXT_PRIMARY,
-                            weight=ft.FontWeight.W_600, expand=True),
-                    ft.Text(time_str, size=12, color=TEXT_MUTED),
-                    ft.Text(created, size=12, color=TEXT_MUTED),
-                ], spacing=12),
-                ft.Row([
-                    ft.Text(article["format"], size=12, color=TEXT_SECONDARY),
-                    ft.Container(expand=True),
-                    *actions,
-                ], spacing=4),
-            ], spacing=4),
-            padding=12,
+            content=ft.Column(card_content, spacing=6),
+            padding=ft.padding.all(14),
             bgcolor=BG_CARD,
             border=ft.border.all(1, BORDER),
-            border_radius=8,
+            border_radius=10,
         )
 
     def _on_search_change(self, e):
@@ -212,7 +286,6 @@ class HistoryTab(ft.Column):
         self._load_articles()
 
     def _on_filter_change(self, e):
-        self.format_filter = self.format_dropdown.value or ""
         self.status_filter = self.status_dropdown.value or ""
         self.sort_value = self.sort_dropdown.value or "newest"
         self.current_page = 1
@@ -230,8 +303,7 @@ class HistoryTab(ft.Column):
             self._load_articles()
 
     def _show_titles(self, titles_raw: str):
-        """Show titles dialog with copy buttons."""
-        import json
+        """Show titles dialog with copy all button."""
         try:
             titles = json.loads(titles_raw)
         except (json.JSONDecodeError, TypeError):
@@ -251,7 +323,7 @@ class HistoryTab(ft.Column):
 
         def on_copy_all(e):
             self._page.run_task(ft.Clipboard().set, all_titles_text)
-            show_snackbar(self._page, "Đã copy 5 tiêu đề", 1500)
+            show_snackbar(self._page, f"Đã copy {len(titles)} tiêu đề", 1500)
 
         def on_close(e):
             close_dialog(self._page, dialog)

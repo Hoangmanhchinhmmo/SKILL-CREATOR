@@ -36,6 +36,7 @@ from views.dashboard import DashboardTab
 from views.pipeline import PipelineTab
 from views.history import HistoryTab
 from views.editor import EditorTab
+from views.translator import TranslatorView
 from views.settings import SettingsTab
 
 
@@ -73,6 +74,7 @@ def main(page: ft.Page):
         pipeline_tab = PipelineTab(page, on_open_editor=on_open_editor)
         history = HistoryTab(page, on_edit=on_edit_article, on_rerun=on_rerun_article)
         editor = EditorTab(page)
+        translator = TranslatorView(page)
         settings = SettingsTab(page)
         def on_update_available(available: bool):
             if layout:
@@ -80,7 +82,7 @@ def main(page: ft.Page):
 
         license_tab = LicenseTab(page, on_deactivated=on_deactivated, on_update_available=on_update_available)
 
-        views = [dashboard, pipeline_tab, history, editor, settings, license_tab]
+        views = [dashboard, pipeline_tab, history, editor, translator, settings, license_tab]
 
         layout = MainLayout(page, views)
 

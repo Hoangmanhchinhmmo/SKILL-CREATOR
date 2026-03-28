@@ -89,9 +89,39 @@ def init_db():
                 token_data   TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS translations (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                title               TEXT,
+                source_text         TEXT NOT NULL,
+                source_lang         TEXT DEFAULT 'vi',
+                source_type         TEXT,
+                source_url          TEXT,
+                result_text         TEXT,
+                config_json         TEXT,
+                mapping_json        TEXT,
+                status              TEXT DEFAULT 'draft',
+                total_segments      INTEGER DEFAULT 0,
+                completed_segments  INTEGER DEFAULT 0,
+                created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS translation_segments (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                translation_id      INTEGER NOT NULL REFERENCES translations(id) ON DELETE CASCADE,
+                segment_index       INTEGER NOT NULL,
+                source_text         TEXT NOT NULL,
+                result_text         TEXT,
+                status              TEXT DEFAULT 'pending',
+                created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE INDEX IF NOT EXISTS idx_articles_created ON articles(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_pipeline_runs_status ON pipeline_runs(status);
             CREATE INDEX IF NOT EXISTS idx_agent_logs_run ON agent_logs(run_id);
+            CREATE INDEX IF NOT EXISTS idx_translations_created ON translations(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_translations_status ON translations(status);
+            CREATE INDEX IF NOT EXISTS idx_translation_segments_tid ON translation_segments(translation_id);
         """)
         # Migration: add titles column if missing
         try:

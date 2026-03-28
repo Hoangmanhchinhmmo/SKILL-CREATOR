@@ -122,12 +122,19 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_translations_created ON translations(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_translations_status ON translations(status);
             CREATE INDEX IF NOT EXISTS idx_translation_segments_tid ON translation_segments(translation_id);
+            CREATE INDEX IF NOT EXISTS idx_translation_segments_tid_idx ON translation_segments(translation_id, segment_index);
         """)
         # Migration: add titles column if missing
         try:
             conn.execute("SELECT titles FROM articles LIMIT 1")
         except sqlite3.OperationalError:
             conn.execute("ALTER TABLE articles ADD COLUMN titles TEXT DEFAULT ''")
+
+        # Migration: add tts_json column to translations
+        try:
+            conn.execute("SELECT tts_json FROM translations LIMIT 1")
+        except sqlite3.OperationalError:
+            conn.execute("ALTER TABLE translations ADD COLUMN tts_json TEXT DEFAULT ''")
 
         conn.commit()
     finally:

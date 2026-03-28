@@ -434,8 +434,8 @@ def get_translation(translation_id: int) -> dict | None:
 def update_translation(translation_id: int, **kwargs):
     """Update translation fields. Accepted keys: title, result_text, config_json,
     mapping_json, status, total_segments, completed_segments."""
-    allowed = {"title", "result_text", "config_json", "mapping_json", "status",
-               "total_segments", "completed_segments"}
+    allowed = {"title", "result_text", "config_json", "mapping_json", "tts_json",
+               "status", "total_segments", "completed_segments"}
     updates = []
     params = []
     for key, val in kwargs.items():
@@ -468,7 +468,9 @@ def delete_translation(translation_id: int):
 
 def list_translations(search: str = "", status_filter: str = "",
                       sort: str = "newest", page: int = 1, per_page: int = 15) -> tuple[list[dict], int]:
-    """List translations with search, filter, sort, pagination."""
+    """List translations — metadata only (no source_text, result_text, tts_json).
+    This is the fast version for history sidebar.
+    """
     conn = get_connection()
     try:
         where_clauses = []
@@ -489,8 +491,12 @@ def list_translations(search: str = "", status_filter: str = "",
 
         total = conn.execute(f"SELECT COUNT(*) FROM translations {where_sql}", params).fetchone()[0]
         offset = (page - 1) * per_page
+
+        # Only select metadata columns — skip heavy text fields
+        select_cols = ("id, title, source_lang, source_type, status, "
+                       "total_segments, completed_segments, created_at, updated_at")
         rows = conn.execute(
-            f"SELECT * FROM translations {where_sql} ORDER BY {order_sql} LIMIT ? OFFSET ?",
+            f"SELECT {select_cols} FROM translations {where_sql} ORDER BY {order_sql} LIMIT ? OFFSET ?",
             params + [per_page, offset],
         ).fetchall()
         return [dict(r) for r in rows], total

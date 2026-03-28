@@ -54,7 +54,19 @@
       "Bash(find D:CODE_2026SKILL-CREATOR -type f -name *.py ! -path */.buildenv/* ! -path */site-packages/* ! -path */.git/*)",
       "Bash(grep -r \"pytest\\\\|unittest\\\\|mock\" 'D:\\\\CODE_2026\\\\SKILL-CREATOR/BONG CHAY NHAT' --include=*.py --include=*.txt --include=*.cfg --include=*.toml --include=*.ini)",
       "Bash(find D:/CODE_2026/SKILL-CREATOR -name *.py -type f)",
-      "Bash(find /d/CODE_2026/SKILL-CREATOR/BONG CHAY NHAT/npb-podcast-app -name *.py -path */translator* -type f)"
+      "Bash(find /d/CODE_2026/SKILL-CREATOR/BONG CHAY NHAT/npb-podcast-app -name *.py -path */translator* -type f)",
+      "Bash(find D:/CODE_2026/Qwen3-TTS -name config.json -path */models/*)",
+      "Bash(taskkill /F /IM python.exe)",
+      "Bash(cd:*)",
+      "Bash(nvidia-smi --query-gpu=utilization.gpu,utilization.memory,memory.used,memory.total,temperature.gpu --format=csv,noheader)",
+      "Bash(taskkill /F /IM NPB-Podcast-Writer.exe)",
+      "Bash(taskkill /F /IM flet.exe)",
+      "Bash(wmic process:*)",
+      "Bash(rd /s /q \"D:\\\\CODE_2026\\\\SKILL-CREATOR\\\\BONG CHAY NHAT\\\\npb-podcast-app\\\\dist\")",
+      "Bash(rd /s /q \"D:\\\\CODE_2026\\\\SKILL-CREATOR\\\\BONG CHAY NHAT\\\\npb-podcast-app\\\\build\")",
+      "Bash(powershell -Command \"Get-Process | Where-Object { $_Path -like ''*NPB*'' -or $_Path -like ''*flet*'' } | Select-Object Id, Name, Path | Format-Table -AutoSize\")",
+      "Bash(powershell -Command \"Get-Process python -ErrorAction SilentlyContinue | Select-Object Id, Name, Path | Format-Table -AutoSize\")",
+      "Bash(powershell -Command \"Stop-Process -Name 'flet' -Force -ErrorAction SilentlyContinue; Stop-Process -Name 'python' -Force -ErrorAction SilentlyContinue; Stop-Process -Name 'NPB-Podcast-Writer' -Force -ErrorAction SilentlyContinue; Start-Sleep 3; Remove-Item -Recurse -Force 'D:\\\\CODE_2026\\\\SKILL-CREATOR\\\\BONG CHAY NHAT\\\\npb-podcast-app\\\\dist' -ErrorAction SilentlyContinue; Remove-Item -Recurse -Force 'D:\\\\CODE_2026\\\\SKILL-CREATOR\\\\BONG CHAY NHAT\\\\npb-podcast-app\\\\build' -ErrorAction SilentlyContinue; Write-Output 'CLEANED'\")"
     ]
   }
 }

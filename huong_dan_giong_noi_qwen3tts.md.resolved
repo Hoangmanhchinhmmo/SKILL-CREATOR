@@ -1,0 +1,395 @@
+# Huong dan Nang cao: Dieu khien Giong noi Bieu cam voi Qwen3-TTS (2025)
+
+Dua tren cac phan tich tu blog chinh thuc cua Qwen (15/01/2025), code thuc te va ket qua Multi-Agent Brainstorming Review.
+
+---
+
+## 1. Kien truc 3 Tang Dieu khien Voice (3-Layer Voice Control)
+
+```
++-----------------------------------------------------+
+|                LAYER 1: MODEL SELECTION              |
+|  Chon model quyet dinh PHUONG THUC dieu khien        |
+|  +-------------- +--------------+----------------+   |
+|  | VoiceDesign   | CustomVoice  |    Base         |   |
+|  | (1.7B only)   | (0.6B/1.7B)  | (Voice Clone)  |   |
+|  +------+--------+------+-------+------+----------+   |
+|         |               |              |              |
++---------v---------------v--------------v--------------+
+|                LAYER 2: INSTRUCT                      |
+|  Dieu khien AM SAC + TRANG THAI tong the              |
+|  (AI dang noi giong gi, cam xuc gi)                   |
+|                                                       |
++-------------------------------------------------------+
+|                LAYER 3: TEXT                           |
+|  Dieu khien HANH VI cu the tung khoanh khac           |
+|  (cuoi, tho, nghi, thay doi tong)                     |
++-------------------------------------------------------+
+```
+
+**Nguyen tac cot loi:**
+- **Instruct:** Quyet dinh *Giong ai dang noi* va *Trang thai cam xuc tong the*.
+- **Text:** Quyet dinh *Hanh vi cu the tung thoi diem* (cuoi, tho, nghi).
+
+---
+
+## 2. Quick Start - Chon Model nao?
+
+```
+Ban co file audio mau?
+  |-- CO  --> Dung Base (Voice Clone)
+  +-- KHONG --> Ban can giong moi hoan toan?
+                 |-- CO  --> Dung VoiceDesign 1.7B
+                 +-- KHONG --> Dung CustomVoice (chon 1 trong 9 speaker)
+```
+
+### Bang so sanh Model
+
+| Tieu chi | VoiceDesign (1.7B) | CustomVoice (0.6B/1.7B) | Base (Clone) |
+|---|---|---|---|
+| **Khi nao dung** | Can giong HOAN TOAN MOI tu mo ta | Can giong preset + cam xuc | Can clone giong that |
+| **Input** | Full voice description (instruct) | Speaker name + short emotion | Reference audio + text |
+| **Do linh hoat** | Cao nhat (mo ta bat ky) | Trung binh (9 preset) | Cao (bat ky giong that) |
+| **Tinh nhat quan** | THAP (moi lan generate khac nhau) | CAO (cung speaker = cung giong) | RAT CAO (clone chinh xac) |
+| **VRAM** | ~4GB | ~2-4GB | ~4GB |
+| **Use case** | YouTube Kids, nhan vat fiction | Audiobook, podcast, da ngon ngu | Dubbing, voice acting |
+
+> **CANH BAO QUAN TRONG:** VoiceDesign tao giong KHAC NHAU moi lan generate. Khong nen dung truc tiep cho content dai nhieu segments. Xem muc "Workflow Production" ben duoi.
+
+---
+
+## 3. LAYER 2: Cach viet Instruct
+
+### RULE #1: Instruct LUON viet bang tieng Anh
+
+Model duoc train tren English instructs. Text (noi dung doc) co the la bat ky ngon ngu nao.
+
+---
+
+### A. VoiceDesign: Full Acoustic Attribute Control
+
+Su dung **7 thuoc tinh** de mo ta giong noi:
+
+| Thuoc tinh | Tu khoa goi y (Tieng Anh) | Y nghia |
+| :--- | :--- | :--- |
+| **Gender** | `Male`, `Female` | Gioi tinh |
+| **Age** | `Young adult`, `Middle-aged`, `Teenager`, `Child-like`, `50+`, `60+` | Do tuoi |
+| **Pitch** | `Low-pitched`, `High-pitched`, `Stable`, `Very low-pitched` | Cao do |
+| **Texture** | `Husky` (khan), `Gravelly` (tram re), `Bright` (sang), `Resonant` (vang), `Breathy` (hoi tho), `Close-mic` (can mic) | Chat giong |
+| **Tone** | `Mischievous` (lem linh), `Authoritative` (uy quyen), `Playful` (vui ve), `Menacing` (de doa), `Informal` (than mat), `Warm` (am ap) | Thai do |
+| **Emotion** | `Hyper-active` (nang dong), `Panicked` (hoang loan), `Sorrowful` (dau kho), `Excited` (hao hung), `Calm` (binh tinh), `Trembling` (run so) | Cam xuc |
+| **Speed** | `Fast-paced`, `Slow and deliberate`, `Moderate pace` | Toc do |
+
+**Vi du Instruct chuan:**
+
+```
+# YouTube Kids - nhan vat nu vui ve
+"Female young voice. Pitch: high-pitched and clear. Texture: bright. Tone: mischievous, playful, and challenging. Performance: frequent light giggles integrated into the speech. Energy: high."
+
+# Vlogger Reaction (can mic, co hoi tho)
+"Male young adult vlogger voice. Texture: breathy, close-mic. Tone: informal and excited."
+
+# Phan dien de doa (CatNap style)
+"Male mature. Pitch: very low-pitched. Texture: gravelly with a slight growl. Tone: menacing, authoritative. Speed: slow and deliberate."
+
+# Nhan vat hoang loan (Huggy Wuggy style)
+"Male young. Emotion: hyper-active, transitioning from intense anxiety to pouting. Performance: theatrical and exaggerated."
+
+# Narrator truyen kich tinh
+"Female 40+. Pitch: stable, warm baritone. Tone: authoritative yet engaging. Speed: moderate."
+```
+
+**Bang mapping Tieng Viet --> Instruct:**
+
+| Muon giong | Viet instruct |
+|---|---|
+| Giong tre con | `Child-like, high-pitched` |
+| Giong ong gia | `Male 60+, low-pitched, slow` |
+| Giong thi tham | `Whispering, very soft` |
+| Giong het | `Shouting, intense, high energy` |
+| Giong run so | `Trembling, fearful, shaky` |
+| Giong am ap | `Warm, gentle, moderate pace` |
+| Giong lanh lung | `Cold, detached, monotone` |
+| Giong vui ve | `Cheerful, bright, energetic` |
+
+---
+
+### B. CustomVoice: Speaker Preset + Short Emotion
+
+**9 Speaker co san:**
+
+| Speaker | Mo ta |
+|---|---|
+| `Ryan` | Giong nam truong thanh, am ap |
+| `Vivian` | Giong nu tre trung, trong treo |
+| `Serena` | Giong nu am ap, truong thanh |
+| `Aiden` | Giong nam tre, nang dong |
+| `uncle_fu` | Giong nam lon tuoi |
+| `ono_anna` | Giong Nhat nu |
+| `sohee` | Giong Han nu |
+
+**Instruct cho CustomVoice = CHI emotion ngan (<50 ky tu):**
+
+```python
+# DUNG - Ngan gon, chi mo ta cam xuc
+instruct = "Very happy"
+instruct = "sad and tearful"
+instruct = "Speaking at an extremely slow pace"
+instruct = "Shouting angrily"
+instruct = "Whispering softly"
+
+# SAI - Dung dung full description cho CustomVoice!
+instruct = "Male young adult voice. Pitch: high. Texture: bright..."  # SAI!
+```
+
+> **LUU Y:** Model 0.6B **KHONG ho tro instruct** -- chi co speaker name co tac dung. Chi model 1.7B CustomVoice moi nhan instruct.
+
+**Tu dong extract emotion tu full instruct:**
+
+Code `TTSEngine._extract_emotion_modifier()` se tu dong rut gon:
+- `"Full description. Emotion: very excited"` --> `"very excited"`
+- Instruct ngan < 50 ky tu --> giu nguyen
+- Khong match --> fallback `"natural and clear"`
+
+Khuyen dung: Viet instruct ngan tu dau thay vi dua vao auto-extract.
+
+---
+
+### C. Base (Voice Clone): Khong co instruct
+
+Voice Clone dung **reference audio** thay vi instruct:
+
+```python
+# Cach 1: Truc tiep tu file audio
+wavs, sr = engine._generate_voice_clone(
+    texts=["Xin chao!"],
+    languages=["auto"],
+    ref_audio_path="reference.wav",
+    ref_text="Day la giong mau de clone."  # Optional nhung cai thien chat luong
+)
+
+# Cach 2: Tao prompt 1 lan, dung lai nhieu lan (KHUYEN DUNG)
+prompt = engine.create_voice_clone_prompt("reference.wav", "Transcript cua audio mau")
+wavs, sr = engine._generate_voice_clone(
+    texts=["Xin chao!", "Hom nay troi dep qua!"],
+    languages=["auto", "auto"],
+    voice_clone_prompt=prompt
+)
+```
+
+**2 che do clone:**
+- **Full mode** (co ref_text): Clone ca am sac + ngu dieu. Chat luong tot nhat.
+- **X-vector only** (khong co ref_text): Chi clone am sac. Nhanh hon, chat luong thap hon.
+
+---
+
+## 4. LAYER 3: Dieu khien hanh vi truc tiep trong Text
+
+**LUU Y CUC KY QUAN TRONG:** Dung bao gio viet ghi chu trong ngoac nhu `(cuoi)` vi AI se doc ca chu do. Hay dung **Tu tuong thanh** va **Ky hieu dac biet**.
+
+### A. Khoang nghi va Ngat quang
+
+| Ky hieu | Hieu ung | Vi du |
+|---|---|---|
+| `......` | Khoang nghi dai (cang nhieu dau cham nghi cang lau) | `"Doi da...... ok tiep nhe"` |
+| `...` | Khoang nghi vua | `"Hmm... thu vi day"` |
+| `,` | Khoang nghi ngan | `"Vang, toi hieu roi"` |
+| `----` | Ngat quang dot ngot / chuyen tong | `"Dung hong---- roi khoi day"` |
+
+### B. Tieng tho va Bieu cam (Onomatopoeia)
+
+| Tu khoa | Hieu ung | Vi du |
+|---|---|---|
+| `huh... ha` | Tieng hit tho sau, tho doc | `"huh... ha...... Ok bat dau nhe!"` |
+| `--uh--` | Tieng ngap ngung (o, um) | `"Toi --uh-- khong chac lam"` |
+| `heh--` | Tieng cuoi khi, lem linh | `"heh-- heh-- heh--! Do bat duoc!"` |
+| `huc huc--` | Tieng nac hoac khoc nhe | `"Huc huc-- Dau qua di a......"` |
+| `Rum----` | Tieng gam gru, giong quai vat | `"Rum---- Cac nguoi nghi..."` |
+| `A!` / `Oi!` | Than tu --> tong cao hoang loan | `"A! Khong khong khong!"` |
+
+### C. Meo nang cao
+
+```python
+# 1. GAP DOI tu tuong thanh de keo dai hieu ung
+text = "heh-- heh-- heh--! Vui qua di!"       # Trang cuoi dai
+text = "huc huc-- huc huc-- Sao lai the..."   # Khoc keo dai
+
+# 2. KET HOP dau cau cho nhip tu nhien
+text = "Hmm, thu vi day... de toi nghi da...... Ok! Co roi!"
+#       ^ngan    ^vua                    ^dai     ^dot ngot
+
+# 3. CHUYEN TONG bang ----
+text = "Toi rat vui---- nhung ma---- that ra cung hoi buon."
+```
+
+> **LUU Y:** Onomatopoeia hoat dong ~80% thoi gian. Ket qua co the khac nhau giua cac lan generate. Gap doi/gap ba tu tuong thanh se tang xac suat thanh cong.
+
+---
+
+## 5. Ap dung cho cac mau nhan vat pho bien
+
+### Mau 1: Video Reaction (Can mic, co tieng tho)
+- **Model:** VoiceDesign 1.7B
+- **Instruct:** `Male young adult vlogger voice. Texture: breathy, close-mic. Tone: informal and excited.`
+- **Text:** `huh... ha...... Ok, he lo ca nha nhe! Chao mung moi nguoi da quay tro lai...`
+
+### Mau 2: Nhan vat Nang dong (Huggy Wuggy style)
+- **Model:** VoiceDesign 1.7B
+- **Instruct:** `Male young. Emotion: hyper-active, transitioning from intense anxiety to pouting. Performance: theatrical and exaggerated.`
+- **Text:** `A! Khong khong khong! Chan cua toi dau roi? ...... Huc huc-- Dau qua di a......`
+
+### Mau 3: Nhan vat Phan dien (CatNap style)
+- **Model:** VoiceDesign 1.7B
+- **Instruct:** `Male mature. Pitch: very low-pitched. Texture: gravelly with a slight growl. Speed: slow and deliberate.`
+- **Text:** `Rum---- Cac nguoi nghi minh co the chay thoat sao? ...... Dung hong---- roi khoi day.`
+
+### Mau 4: Audiobook da nhan vat
+- **Model:** CustomVoice 1.7B
+- **Speaker:** `Serena` (narrator), `Ryan` (nam chinh), `Vivian` (nu chinh)
+- **Instruct Narrator:** `Calm, engaging storytelling voice`
+- **Instruct Dialog:** Thay doi theo cam xuc: `"angry"`, `"whispering nervously"`, `"laughing happily"`
+
+### Mau 5: Clone giong YouTuber co san
+- **Model:** Base (Voice Clone)
+- **Input:** File audio mau 3-10 giay + transcript
+- **Luu y:** Dung `create_voice_clone_prompt()` 1 lan, tai su dung cho tat ca segments
+
+---
+
+## 6. Workflow Production: Dam bao Nhat quan Giong noi
+
+### Van de: VoiceDesign tao giong khac nhau moi lan
+
+Neu dung VoiceDesign truc tiep cho 50 segments --> 50 giong khac nhau!
+
+### Giai phap A: VoiceDesign + Clone (Khuyen dung)
+
+```python
+from gui.core.tts_engine import TTSEngine
+
+# Buoc 1: Tao 1 audio mau bang VoiceDesign
+engine_vd = TTSEngine("./Qwen3-TTS-12Hz-1.7B-VoiceDesign")
+engine_vd.load_model()
+
+segments_sample = [{"text": "Day la giong mau.", "instruct": "Female young, bright, playful."}]
+gen_time, duration, wavs, sr = engine_vd.generate(
+    segments=segments_sample, output_path="voice_sample.wav", batch_size=1
+)
+engine_vd.unload_model()  # Giai phong VRAM
+
+# Buoc 2: Chuyen sang Base model, tao clone prompt
+engine_clone = TTSEngine("./Qwen3-TTS-12Hz-1.7B-Base")
+engine_clone.load_model()
+
+prompt = engine_clone.create_voice_clone_prompt("voice_sample.wav", "Day la giong mau.")
+
+# Buoc 3: Dung prompt cho TAT CA segments (consistency 100%)
+segments_full = [
+    {"text": "Cau 1 cua truyen..."},
+    {"text": "Cau 2 cua truyen..."},
+    {"text": "Cau 3 cua truyen..."},
+]
+gen_time, duration, wavs, sr = engine_clone.generate(
+    segments=segments_full, output_path="output_full.wav",
+    batch_size=16, voice_clone_prompt=prompt
+)
+```
+
+### Giai phap B: Dung CustomVoice (Don gian hon)
+
+```python
+engine = TTSEngine("./Qwen3-TTS-12Hz-1.7B-CustomVoice")
+engine.load_model()
+
+# Cung speaker = cung giong, chi thay doi emotion
+segments = [
+    {"text": "Cau 1...", "instruct": "calm narration", "speaker": "Serena"},
+    {"text": "Cau 2...", "instruct": "excited", "speaker": "Serena"},
+    {"text": "Cau 3...", "instruct": "sad and tearful", "speaker": "Serena"},
+]
+gen_time, duration, wavs, sr = engine.generate(
+    segments=segments, output_path="output.wav", batch_size=16, speaker="Serena"
+)
+```
+
+---
+
+## 7. Toi uu hoa trong Code Python
+
+### Gioi han Segment
+
+- Moi segment toi da **~50-80 tu** (~15-17 giay audio)
+- `max_new_tokens=2048` gioi han do dai audio output
+- Text dai hon se bi cat ma khong co warning
+- Luon chia nho text thanh segments truoc khi generate
+
+### Code mau an toan
+
+```python
+from gui.core.tts_engine import TTSEngine
+
+# Khoi tao
+engine = TTSEngine("./Qwen3-TTS-12Hz-1.7B-VoiceDesign")
+engine.load_model()
+
+# Cau truc Segment chuan
+segments = [
+    {
+        "text": "huh... ha...... He lo ca nha!",
+        "instruct": "Male vlogger voice, breathy, excited."
+    }
+]
+
+# Goi ham tao an toan (da co torch.no_grad() ben trong)
+gen_time, duration, wavs, sr = engine.generate(
+    segments=segments,
+    output_path="output.wav",
+    batch_size=1
+)
+```
+
+> **TIP:** Luon su dung `engine.generate()` thay vi goi cac ham noi bo (`_generate_voice_design`, v.v.) de dam bao GPU duoc giai phong bo nho sau moi lan tao.
+
+### Su dung AI (Gemini) phan tich tu dong
+
+Xem file `test_story_roleplay2.py` de tham khao cach:
+1. Dung Gemini phan tich truyen --> nhan dien nhan vat
+2. Tu dong gan speaker + emotion instruct cho tung doan thoai
+3. Batch generate theo speaker group de toi uu toc do
+
+---
+
+## 8. Meo nho de giong that hon
+
+1. **Gap doi tu tuong thanh:** Thay vi `heh--`, hay dung `heh-- heh-- heh--` de tao trang cuoi dai.
+2. **Ket hop dau cham va dau phay:** Dau phay tao khoang nghi ngan, dau cham tao khoang nghi vua, va `......` tao khoang nghi dai.
+3. **Tan dung VoiceDesign + Clone:** Tao giong doc ban bang VoiceDesign, sau do Clone de giu tinh on dinh.
+4. **Test nhanh voi Gradio:** Dung `python app_local.py` de thu giong interactive truoc khi viet code.
+5. **CustomVoice cho production:** 9 speaker preset du cho hau het use cases va dam bao consistency.
+
+---
+
+## 9. Bang tom tat Compatibility
+
+| Tinh nang | VoiceDesign 1.7B | CustomVoice 1.7B | CustomVoice 0.6B | Base 1.7B | Base 0.6B |
+|---|---|---|---|---|---|
+| Full instruct (7 thuoc tinh) | CO | KHONG | KHONG | KHONG | KHONG |
+| Short emotion instruct | KHONG (dung full) | CO | KHONG | KHONG | KHONG |
+| Speaker preset | KHONG | CO (9 speakers) | CO (9 speakers) | KHONG | KHONG |
+| Voice clone tu audio | KHONG | KHONG | KHONG | CO | CO |
+| Onomatopoeia trong text | CO | CO | CO | CO | CO |
+| Consistency giua segments | THAP | CAO | CAO | RAT CAO | RAT CAO |
+| VRAM can thiet | ~4GB | ~4GB | ~2GB | ~4GB | ~2GB |
+
+---
+
+## 10. Troubleshooting
+
+| Van de | Nguyen nhan | Giai phap |
+|---|---|---|
+| Giong khac nhau moi lan | Dung VoiceDesign truc tiep | Chuyen sang Clone workflow hoac CustomVoice |
+| AI doc chu `(cuoi)` thay vi cuoi | Viet ghi chu trong ngoac | Dung onomatopoeia: `heh--` |
+| Instruct khong co tac dung | Dung model 0.6B hoac viet qua dai | Kiem tra model version, viet ngan < 50 chars |
+| Audio bi cat ngang | Segment qua dai | Chia nho text, moi segment < 80 tu |
+| Giong khong giong audio mau | Khong co ref_text | Them transcript cua audio mau de tang chat luong |
+| OOM (het VRAM) | Batch size qua lon | Giam batch_size xuong 1-4, goi `torch.cuda.empty_cache()` |

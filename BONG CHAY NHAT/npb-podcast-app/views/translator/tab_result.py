@@ -1,8 +1,10 @@
 """
-Tab Result — Editor with 3 modes (Edit/Preview/Split) + history.
+Tab Result — Editor with 4 modes (Edit/Preview/Split/TTS) + history.
 """
 
 import os
+import json
+import re
 import datetime
 import threading
 
@@ -10,21 +12,58 @@ import flet as ft
 from theme import (
     BG_PRIMARY, BG_CARD, BG_ELEVATED, BORDER,
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, SUCCESS, DANGER, INFO,
+    WARNING,
     card_style, accent_button, outlined_button, danger_button, show_snackbar,
     CARD_BORDER_RADIUS, BUTTON_BORDER_RADIUS,
 )
 
+# Speaker → color mapping for TTS view
+SPEAKER_COLORS = {
+    "narrator": "#6B7280",     # gray
+    "default": "#3B82F6",      # blue
+}
+SPEAKER_COLOR_POOL = [
+    "#EF4444",  # red
+    "#8B5CF6",  # purple
+    "#F59E0B",  # amber
+    "#10B981",  # emerald
+    "#EC4899",  # pink
+    "#06B6D4",  # cyan
+    "#F97316",  # orange
+]
+
+TTS_MARKER = "<!-- TTS_SEGMENTS -->"
+
+
+def _split_tts_data(raw_text: str) -> tuple[str, list[dict]]:
+    """Split raw result into plain text and TTS segments."""
+    if TTS_MARKER not in raw_text:
+        return raw_text, []
+    parts = raw_text.split(TTS_MARKER, 1)
+    plain_text = parts[0].strip()
+    tts_segments = []
+    if len(parts) > 1:
+        try:
+            match = re.search(r"\[[\s\S]*\]", parts[1])
+            if match:
+                tts_segments = json.loads(match.group())
+        except (json.JSONDecodeError, AttributeError):
+            pass
+    return plain_text, tts_segments
+
 
 class TabResult(ft.Column):
-    """Result sub-tab — editor + history."""
+    """Result sub-tab — editor + history. Supports TTS view."""
 
     def __init__(self, page: ft.Page, state, on_new=None):
         super().__init__(expand=True, spacing=12)
         self._page = page
         self._state = state
         self._on_new = on_new
-        self._mode = "split"  # edit / preview / split
+        self._mode = "split"  # edit / preview / split / tts
         self._auto_save_timer = None
+        self._tts_segments: list[dict] = []
+        self._speaker_color_map: dict[str, str] = {}
 
         # ── Editor fields ──
         self._result_editor = ft.TextField(
@@ -72,13 +111,124 @@ class TabResult(ft.Column):
         self._build_controls()
 
     def refresh(self):
-        """Load data from state."""
+        """Load data from state — separate plain text and TTS segments."""
         if self._state.final_text:
-            self._result_editor.value = self._state.final_text
+            raw = self._state.final_text
+            # Try separate tts_json first (new format), then fallback to embedded marker
+            tts = []
+            if hasattr(self._state, 'tts_json') and self._state.tts_json:
+                try:
+                    tts = json.loads(self._state.tts_json)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                plain = raw
+            else:
+                # Backward compat: parse from embedded marker
+                plain, tts = _split_tts_data(raw)
+
+            self._result_editor.value = plain
             self._source_viewer.value = self._state.source_text or ""
+            self._tts_segments = tts
+            self._assign_speaker_colors()
             self._update_stats()
+            if tts and self._mode == "split":
+                self._mode = "tts"
         self._load_history()
         self._build_controls()
+
+    def _assign_speaker_colors(self):
+        """Assign a unique color to each speaker."""
+        self._speaker_color_map = {}
+        color_idx = 0
+        for seg in self._tts_segments:
+            sp = seg.get("speaker", "narrator")
+            if sp not in self._speaker_color_map:
+                if sp == "narrator":
+                    self._speaker_color_map[sp] = SPEAKER_COLORS["narrator"]
+                else:
+                    self._speaker_color_map[sp] = SPEAKER_COLOR_POOL[color_idx % len(SPEAKER_COLOR_POOL)]
+                    color_idx += 1
+
+    def _build_tts_view(self) -> ft.Column:
+        """Build TTS segments view — visual speaker + emotion + text."""
+        if not self._tts_segments:
+            return ft.Column([
+                ft.Text("Không có dữ liệu TTS. Bật TTS Director trong Cấu hình để tạo.",
+                         size=13, color=TEXT_MUTED),
+            ])
+
+        # Speaker legend
+        legend_items = []
+        for sp, color in self._speaker_color_map.items():
+            legend_items.append(
+                ft.Container(
+                    content=ft.Row([
+                        ft.Container(width=10, height=10, bgcolor=color, border_radius=5),
+                        ft.Text(sp, size=11, color=TEXT_PRIMARY),
+                    ], spacing=4),
+                    padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                )
+            )
+
+        # Stats
+        speaker_counts = {}
+        for seg in self._tts_segments:
+            sp = seg.get("speaker", "narrator")
+            speaker_counts[sp] = speaker_counts.get(sp, 0) + 1
+
+        stats_text = f"{len(self._tts_segments)} segments │ {len(speaker_counts)} speakers"
+
+        legend = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Text("Speakers", size=13, color=TEXT_PRIMARY, weight=ft.FontWeight.BOLD),
+                    ft.Container(expand=True),
+                    ft.Text(stats_text, size=11, color=TEXT_MUTED),
+                ]),
+                ft.Row(legend_items, spacing=8, wrap=True),
+            ], spacing=6),
+            **card_style(),
+        )
+
+        # Segments list
+        seg_controls = []
+        for i, seg in enumerate(self._tts_segments):
+            sp = seg.get("speaker", "narrator")
+            instruct = seg.get("instruct", "")
+            text = seg.get("text", "")
+            color = self._speaker_color_map.get(sp, SPEAKER_COLORS["default"])
+
+            seg_controls.append(
+                ft.Container(
+                    content=ft.Row([
+                        # Color bar
+                        ft.Container(width=4, height=40, bgcolor=color, border_radius=2),
+                        # Content
+                        ft.Column([
+                            ft.Row([
+                                ft.Text(sp, size=12, color=color, weight=ft.FontWeight.BOLD),
+                                ft.Container(
+                                    content=ft.Text(instruct, size=10, color=TEXT_MUTED),
+                                    bgcolor=BG_ELEVATED,
+                                    border_radius=4,
+                                    padding=ft.padding.symmetric(horizontal=6, vertical=1),
+                                ) if instruct else ft.Container(),
+                            ], spacing=8),
+                            ft.Text(text, size=13, color=TEXT_PRIMARY),
+                        ], spacing=2, expand=True),
+                    ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.START),
+                    padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                )
+            )
+
+        segments_scroll = ft.ListView(
+            controls=seg_controls,
+            spacing=2,
+            expand=True,
+            auto_scroll=False,
+        )
+
+        return ft.Column([legend, segments_scroll], spacing=8, expand=True)
 
     def _build_controls(self):
         # Mode buttons
@@ -87,6 +237,8 @@ class TabResult(ft.Column):
             ("preview", "Preview", ft.Icons.VISIBILITY),
             ("split", "Split", ft.Icons.VERTICAL_SPLIT),
         ]
+        if self._tts_segments:
+            modes.append(("tts", f"TTS ({len(self._tts_segments)})", ft.Icons.RECORD_VOICE_OVER))
         mode_buttons = []
         for key, label, icon in modes:
             is_active = self._mode == key
@@ -111,7 +263,11 @@ class TabResult(ft.Column):
                 self._stats_text,
                 ft.Container(width=16),
                 ft.IconButton(icon=ft.Icons.CONTENT_COPY, icon_size=18, icon_color=TEXT_MUTED,
-                              tooltip="Copy", on_click=self._on_copy),
+                              tooltip="Copy text", on_click=self._on_copy),
+                ft.IconButton(icon=ft.Icons.CODE, icon_size=18,
+                              icon_color=ACCENT if self._tts_segments else TEXT_MUTED,
+                              tooltip="Copy TTS JSON",
+                              on_click=self._on_copy_tts) if self._tts_segments else ft.Container(),
                 ft.IconButton(icon=ft.Icons.SAVE_ALT, icon_size=18, icon_color=TEXT_MUTED,
                               tooltip="Export .md", on_click=self._on_export),
                 ft.IconButton(icon=ft.Icons.SAVE, icon_size=18, icon_color=ACCENT,
@@ -132,6 +288,8 @@ class TabResult(ft.Column):
                 expand=True,
                 **card_style(),
             )
+        elif self._mode == "tts":
+            editor_area = self._build_tts_view()
         else:  # split
             editor_area = ft.Row([
                 ft.Container(
@@ -210,7 +368,14 @@ class TabResult(ft.Column):
         text = self._result_editor.value or ""
         if text:
             self._page.run_task(ft.Clipboard().set, text)
-            show_snackbar(self._page, "Đã copy!")
+            show_snackbar(self._page, "Đã copy text!")
+
+    def _on_copy_tts(self, e):
+        """Copy TTS segments as JSON to clipboard."""
+        if self._tts_segments:
+            tts_json = json.dumps(self._tts_segments, ensure_ascii=False, indent=2)
+            self._page.run_task(ft.Clipboard().set, tts_json)
+            show_snackbar(self._page, f"Đã copy {len(self._tts_segments)} TTS segments (JSON)!")
 
     def _on_export(self, e):
         text = self._result_editor.value or ""
@@ -232,7 +397,14 @@ class TabResult(ft.Column):
             f.write(f"# {self._state.title}\n\n")
             f.write(text)
 
-        show_snackbar(self._page, f"Đã export: {filepath}")
+        # Also export TTS JSON if available
+        if self._tts_segments:
+            tts_filepath = os.path.join(downloads, f"{safe_title}_tts.json")
+            with open(tts_filepath, "w", encoding="utf-8") as f:
+                json.dump(self._tts_segments, f, ensure_ascii=False, indent=2)
+            show_snackbar(self._page, f"Đã export: {filepath} + TTS JSON")
+        else:
+            show_snackbar(self._page, f"Đã export: {filepath}")
 
     def _on_save(self, e=None):
         self._save_to_db()
@@ -247,10 +419,11 @@ class TabResult(ft.Column):
     def _save_to_db(self):
         if self._state.translation_id:
             from db.models import update_translation
-            update_translation(
-                self._state.translation_id,
-                result_text=self._result_editor.value or "",
-            )
+            plain = self._result_editor.value or ""
+            kwargs = {"result_text": plain}
+            if self._tts_segments:
+                kwargs["tts_json"] = json.dumps(self._tts_segments, ensure_ascii=False)
+            update_translation(self._state.translation_id, **kwargs)
 
     def _toggle_history(self, e):
         self._history_visible = not self._history_visible
@@ -313,20 +486,41 @@ class TabResult(ft.Column):
             pass
 
     def _load_translation(self, translation_id: int):
-        """Load a previous translation into editor."""
+        """Load a previous translation into editor — fast load with separate TTS column."""
         from db.models import get_translation
         t = get_translation(translation_id)
         if t:
             self._state.translation_id = translation_id
             self._state.title = t.get("title", "")
             self._state.source_text = t.get("source_text", "")
-            self._state.final_text = t.get("result_text", "")
-            self._result_editor.value = t.get("result_text", "")
+            raw = t.get("result_text", "")
+            tts_col = t.get("tts_json", "")
+
+            # Try tts_json column first (fast), fallback to embedded marker (backward compat)
+            tts = []
+            if tts_col:
+                try:
+                    tts = json.loads(tts_col)
+                    plain = raw  # result_text is clean, no marker
+                except (json.JSONDecodeError, TypeError):
+                    plain, tts = _split_tts_data(raw)
+            else:
+                plain, tts = _split_tts_data(raw)
+
+            self._state.final_text = plain
+            self._result_editor.value = plain
             self._source_viewer.value = t.get("source_text", "")
+            self._tts_segments = tts
+            self._assign_speaker_colors()
+            if tts:
+                self._mode = "tts"
             self._update_stats()
             self._build_controls()
             self._page.update()
-            show_snackbar(self._page, f"Đã load #{translation_id}")
+            msg = f"Đã load #{translation_id}"
+            if tts:
+                msg += f" ({len(tts)} TTS segments)"
+            show_snackbar(self._page, msg)
 
     def _delete_translation(self, translation_id: int):
         """Delete a translation."""
@@ -346,6 +540,8 @@ class TabResult(ft.Column):
         self._source_viewer.value = ""
         self._preview_md.value = ""
         self._stats_text.value = ""
+        self._tts_segments = []
+        self._speaker_color_map = {}
         self._mode = "split"
         self._history_visible = False
         self._build_controls()

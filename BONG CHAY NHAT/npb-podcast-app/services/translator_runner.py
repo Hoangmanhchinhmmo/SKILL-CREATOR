@@ -289,11 +289,35 @@ class TranslatorRunner:
                     result_parts.append(seg["result_text"])
 
             full_result = "\n\n".join(result_parts)
+
+            # ── Agent 4: TTS Director (optional) ──
+            tts_mode = config.get("tts_mode", False)
+            tts_segments_all = []
+            if tts_mode and result_parts:
+                self.on_progress("TTS Director", "running", -1, "Phân tích giọng nói...")
+                self._log("TTS Director", "Đang phân tích giọng nói cho từng đoạn...")
+                for i, part in enumerate(result_parts):
+                    if self._cancelled:
+                        break
+                    self._log("TTS Director", f"Đoạn {i+1}/{len(result_parts)}...")
+                    tts_segs = self._run_tts_director(part, analysis, _call_gemini)
+                    tts_segments_all.extend(tts_segs)
+
+                self.on_progress("TTS Director", "passed", -1,
+                                 f"✅ {len(tts_segments_all)} TTS segments")
+                self._log("TTS Director", f"✅ Tạo {len(tts_segments_all)} TTS segments")
+
             elapsed = time.time() - start_time
+
+            # Save results — TTS JSON in separate column for fast loading
+            tts_json_str = ""
+            if tts_segments_all:
+                tts_json_str = json.dumps(tts_segments_all, ensure_ascii=False)
 
             update_translation(
                 translation_id,
                 result_text=full_result,
+                tts_json=tts_json_str,
                 status="done",
                 completed_segments=len(result_parts),
             )
@@ -731,3 +755,89 @@ JSONのみ返してください。"""
 
         # If we can't parse, assume passed
         return {"passed": True, "issues": [], "feedback": "", "corrected_text": ""}
+
+    def _run_tts_director(self, translated_text: str, analysis: dict, call_fn) -> list[dict]:
+        """Agent 4: TTS Director — Split translated text into TTS-ready segments.
+
+        Analyzes translated text and produces a list of TTS segments, each with:
+        - speaker: Qwen3-TTS speaker name or character label
+        - instruct: Qwen3-TTS voice instruct (emotion, tone)
+        - text: The actual text to speak (with onomatopoeia markers)
+
+        Compatible with Qwen3-TTS CustomVoice (speaker + short emotion instruct).
+        """
+        characters = analysis.get("characters_summary", [])
+        chars_str = ""
+        if characters:
+            chars_info = []
+            for ch in characters:
+                name = ch.get("japanese_name", ch.get("original_name", "?"))
+                role = ch.get("role", ch.get("role_vi", ""))
+                chars_info.append(f"- {name}: {role}")
+            chars_str = "\n".join(chars_info)
+
+        prompt = f"""以下の日本語テキストを、TTS（テキスト読み上げ）用のセグメントに分割してください。
+
+【テキスト】
+{translated_text}
+
+【登場人物】
+{chars_str if chars_str else "（不明 — テキストから判断してください）"}
+
+【タスク】
+テキストを読み上げ用に分割し、各セグメントに以下を指定してください：
+
+1. **speaker**: 誰が話しているか
+   - ナレーション部分 → "narrator"
+   - 登場人物の台詞 → その人物名（ひらがな）
+   - 複数ナレーターの場合は区別する
+
+2. **instruct**: 感情・トーン（英語、50文字以内）
+   Qwen3-TTS CustomVoice用の短い感情指示。例：
+   - "calm narration" （落ち着いたナレーション）
+   - "angry, shouting" （怒り、叫び）
+   - "whispering nervously" （緊張してささやく）
+   - "sad and tearful" （悲しみ、涙声）
+   - "excited, happy" （興奮、喜び）
+   - "cold, sarcastic" （冷たい、皮肉）
+   - "trembling with fear" （恐怖で震える）
+
+3. **text**: 読み上げるテキスト
+   - 間（ま）を入れる箇所: 「......」（長い間）、「...」（短い間）
+   - 感嘆: 「A!」「Oi!」はそのまま
+   - 笑い声: 「heh--」を台詞の前に追加
+   - 泣き声: 「huc huc--」を台詞の前に追加
+   - ため息: 「huh... ha」を追加
+   - 各セグメントは50〜80文字以内（それ以上は分割）
+
+【出力形式 — JSON配列】
+[
+  {{"speaker": "narrator", "instruct": "calm, engaging storytelling", "text": "さとう みほ は言いました。"}},
+  {{"speaker": "さとう みほ", "instruct": "angry, shouting", "text": "なんで そんなこと するの！"}},
+  {{"speaker": "narrator", "instruct": "calm narration", "text": "...... しばらく沈黙が続きました。"}}
+]
+
+JSON配列のみ返してください。"""
+
+        system = "あなたはTTS音声制作の専門家です。テキストを分析し、キャラクター別・感情別にTTS用セグメントを作成します。Qwen3-TTSのCustomVoice形式に最適化してください。"
+
+        try:
+            result = call_fn(system, prompt, "data_collector")
+            # Parse JSON array
+            json_match = re.search(r"\[[\s\S]*\]", result)
+            if json_match:
+                segments = json.loads(json_match.group())
+                # Validate structure
+                valid = []
+                for seg in segments:
+                    if isinstance(seg, dict) and "text" in seg:
+                        valid.append({
+                            "speaker": seg.get("speaker", "narrator"),
+                            "instruct": seg.get("instruct", "natural and clear"),
+                            "text": seg["text"],
+                        })
+                return valid if valid else []
+        except (json.JSONDecodeError, AttributeError, Exception):
+            pass
+
+        return []

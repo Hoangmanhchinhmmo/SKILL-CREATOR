@@ -26,10 +26,11 @@ SIDEBAR_ITEMS_TOP = [
 
 SIDEBAR_ITEMS_BOTTOM_GROUP = [
     SidebarItem(ft.Icons.TRANSLATE_ROUNDED, "Dịch Truyện", 4),
+    SidebarItem(ft.Icons.RECORD_VOICE_OVER_ROUNDED, "Voice TTS", 5),
 ]
 
-SETTINGS_ITEM = SidebarItem(ft.Icons.SETTINGS_ROUNDED, "Cấu hình", 5)
-LICENSE_ITEM = SidebarItem(ft.Icons.KEY_ROUNDED, "License", 6)
+SETTINGS_ITEM = SidebarItem(ft.Icons.SETTINGS_ROUNDED, "Cấu hình", 6)
+LICENSE_ITEM = SidebarItem(ft.Icons.KEY_ROUNDED, "License", 7)
 
 # Keep SIDEBAR_ITEMS for backward compat (all nav items)
 SIDEBAR_ITEMS = SIDEBAR_ITEMS_TOP + SIDEBAR_ITEMS_BOTTOM_GROUP + [SETTINGS_ITEM]

@@ -45,6 +45,7 @@ class TranslatorState:
 
     # Result
     final_text: str = ""
+    tts_json: str = ""
 
     def reset(self):
         """Reset state for new translation."""
@@ -58,6 +59,7 @@ class TranslatorState:
         self.translation_id = None
         self.is_running = False
         self.final_text = ""
+        self.tts_json = ""
 
 
 SUB_TAB_LABELS = ["📥 Nhập liệu", "⚙ Cấu hình", "🔍 Phân tích", "⚡ Tiến trình", "📄 Kết quả"]

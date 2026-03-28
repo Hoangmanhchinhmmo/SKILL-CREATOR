@@ -80,6 +80,9 @@ BUILD_REQUIREMENTS = [
     "python-dotenv>=1.0.0",
     "beautifulsoup4>=4.12.0",
     "yt-dlp>=2024.0.0",
+    "numpy>=1.26.0",
+    "soundfile>=0.12.0",
+    "huggingface_hub>=0.20.0",
     "pyinstaller>=6.0.0",
 ]
 

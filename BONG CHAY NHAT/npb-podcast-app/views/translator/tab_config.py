@@ -134,6 +134,11 @@ class TabConfig(ft.Column):
         ]
         saved_speed = "balanced" if saved_fast else "safe"
         self._speed_mode = self._radio_group("speed", SPEED_OPTIONS, saved_speed)
+        self._tts_mode = ft.Switch(
+            label="TTS Director — Phân tích giọng nói (Qwen3-TTS)",
+            value=False,
+            active_color=ACCENT,
+        )
         self._channel_field = input_field(
             label="Tên kênh CTA",
             value=saved_channel,
@@ -274,6 +279,7 @@ class TabConfig(ft.Column):
                     ft.Text("Tốc độ dịch", size=13, color=TEXT_SECONDARY),
                     self._speed_mode,
                 ], spacing=4),
+                self._tts_mode,
                 self._channel_field,
             ], spacing=12),
             visible=self._advanced_visible,
@@ -361,6 +367,7 @@ class TabConfig(ft.Column):
             "style": self._style_dd.value or "podcast",
             "speed_mode": speed,
             "fast_mode": speed != "safe",  # backward compat
+            "tts_mode": self._tts_mode.value or False,
             "channel_name": self._channel_field.value or DEFAULT_CHANNEL,
             "max_retries": 2,
             "model_analyzer": self._model_analyzer_dd.value or DEFAULT_MODEL_ANALYZER,
